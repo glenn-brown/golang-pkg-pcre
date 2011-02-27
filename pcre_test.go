@@ -42,49 +42,67 @@ func equal(l, r []string) bool {
 	return true
 }
 
-func TestMatcher(t *testing.T) {
-	check := func (pattern, subject string, args ...interface{}) {
-		re := MustCompile(pattern)
-		m := re.Matcher([]byte(subject))
-		if len(args) == 0 {
-			if m.Matches() {
-				t.Error(pattern, subject, "!Matches")
-			}
-		} else {
-			if !m.Matches() {
-				t.Error(pattern, subject, "Matches")
-				return
-			}
-			if m.Groups() != len(args) - 1 {
-				t.Error(pattern, subject, "Groups", m.Groups())
-				return
-			}
-			for i, arg := range args {
-				if s, ok := arg.(string); ok {
-					if !m.Present(i) {
-						t.Error(pattern, subject,
-							"Present", i)
+func checkmatch1(t *testing.T, dostring bool, pattern, subject string,
+	args ...interface{}) {
+	re := MustCompile(pattern)
+	var m *Matcher
+	var prefix string
+	if dostring {
+		m = re.MatcherString(subject)
+		prefix = "string"
+	} else {
+		m = re.Matcher([]byte(subject))
+		prefix = "[]byte"
+	}
+	if len(args) == 0 {
+		if m.Matches() {
+			t.Error(prefix, pattern, subject, "!Matches")
+		}
+	} else {
+		if !m.Matches() {
+			t.Error(prefix, pattern, subject, "Matches")
+			return
+		}
+		if m.Groups() != len(args) - 1 {
+			t.Error(prefix, pattern, subject, "Groups", m.Groups())
+			return
+		}
+		for i, arg := range args {
+			if s, ok := arg.(string); ok {
+				if !m.Present(i) {
+					t.Error(prefix, pattern, subject,
+						"Present", i)
 
-					}
-					if s != string(m.Group(i)) {
-						t.Error(pattern, subject,
-							"Group", i, s)
-					}
-					if s != m.GroupString(i) {
-						t.Error(pattern, subject,
-							"GroupString", i, s)
-					}
-				} else {
-					if m.Present(i) {
-						t.Error(pattern, subject,
-							"!Present", i)
-					}
+				}
+				if g := string(m.Group(i)); g != s {
+					t.Error(prefix, pattern, subject,
+						"Group", i, g, "!=", s)
+				}
+				if g := m.GroupString(i); g != s {
+					t.Error(prefix, pattern, subject,
+						"GroupString", i, g, "!=", s)
+				}
+			} else {
+				if m.Present(i) {
+					t.Error(prefix, pattern, subject,
+						"!Present", i)
 				}
 			}
 		}
 	}
+}
+
+func TestMatcher(t *testing.T) {
+	check := func(pattern, subject string, args ...interface{}) {
+		checkmatch1(t, false, pattern, subject, args...)
+		checkmatch1(t, true, pattern, subject, args...)
+	}
 
 	check(`^$`, "", "")
 	check(`^abc$`, "abc", "abc")
+	check(`^(X)*ab(c)$`, "abc", "abc", nil, "c")
 	check(`^(X)*ab()c$`, "abc", "abc", nil, "")
+	check(`^.*$`, "abc", "abc")
+	check(`^.*$`, "a\000c", "a\000c")
+	check(`^(.*)$`, "a\000c", "a\000c", "a\000c")
 }

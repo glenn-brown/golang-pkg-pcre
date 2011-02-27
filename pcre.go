@@ -70,12 +70,19 @@ type Matcher struct {
 	groups int
 	ovector []C.int
 	matches bool
-	subject []byte
+	subjects string
+	subjectb []byte
 }
 
 func (p PCRE) Matcher(subject []byte) (m *Matcher) {
 	m = new(Matcher)
 	m.Reset(p, subject)
+	return
+}
+
+func (p PCRE) MatcherString(subject string) (m *Matcher) {
+	m = new(Matcher)
+	m.ResetString(p, subject)
 	return
 }
 
@@ -85,6 +92,14 @@ func (m *Matcher) Reset(p PCRE, subject []byte) {
 	}
 	m.init(p)
 	m.Match(subject)
+}
+
+func (m *Matcher) ResetString(p PCRE, subject string) {
+	if p.ptr == nil {
+		panic("PCRE.Matcher: uninitialized")
+	}
+	m.init(p)
+	m.MatchString(subject)
 }
 
 func (m *Matcher) init(p PCRE) {
@@ -107,7 +122,8 @@ func (m *Matcher) Match(subject []byte) bool {
 		panic("Matcher.Match: uninitialized")
 	}
 	length := len(subject)
-	m.subject = subject
+	m.subjects = ""
+	m.subjectb = subject
 	if length == 0 {
 		subject = nullbyte // make first character adressable
 	}
@@ -116,6 +132,29 @@ func (m *Matcher) Match(subject []byte) bool {
 	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&m.pcre.ptr[0])), nil,
 		subjectptr, C.int(length),
 		0, 0, ovectorptr, C.int(len(m.ovector)))
+	return m.match(rc)
+}
+
+func (m *Matcher) MatchString(subject string) bool {
+	if m.pcre.ptr == nil {
+		panic("Matcher.Match: uninitialized")
+	}
+	length := len(subject)
+	m.subjects = subject
+	m.subjectb = nil
+	subjectptr := C.CString(subject)
+	if subjectptr == nil {
+		panic("pcre.MatchString: malloc")
+	}
+	defer C.free(unsafe.Pointer(subjectptr))
+	ovectorptr := &m.ovector[0]
+	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&m.pcre.ptr[0])), nil,
+		subjectptr, C.int(length),
+		0, 0, ovectorptr, C.int(len(m.ovector)))
+	return m.match(rc)
+}
+
+func (m *Matcher) match(rc C.int) bool {
 	switch{
 	case rc >= 0:
 		m.matches = true
@@ -151,7 +190,10 @@ func (m *Matcher) Group(group int) []byte {
 	start := m.ovector[2 * group]
 	end := m.ovector[2 * group + 1]
 	if start >= 0 {
-		return m.subject[start:end]
+		if m.subjectb != nil {
+			return m.subjectb[start:end]
+		}
+		return []byte(m.subjects[start:end])
 	}
 	return nil
 }
@@ -161,7 +203,15 @@ func (m *Matcher) Group(group int) []byte {
 // actual capture group is numbered 1.  Capture groups which are not
 // present return a nil slice.
 func (m *Matcher) GroupString(group int) string {
-	return string(m.Group(group))
+	start := m.ovector[2 * group]
+	end := m.ovector[2 * group + 1]
+	if start >= 0 {
+		if m.subjectb != nil {
+			return string(m.subjectb[start:end])
+		}
+		return m.subjects[start:end]
+	}
+	return ""
 }
 
 type CompileError struct {

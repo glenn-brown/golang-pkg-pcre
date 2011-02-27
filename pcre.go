@@ -4,16 +4,6 @@ package pcre
 #cgo LDFLAGS: -lpcre
 #include <pcre.h>
 #include <string.h>
-
-static int
-go_pcre_exec(const pcre *code, const pcre_extra *extra,
-             _GoString_ subject, int startoffset,
-             int options, int *ovector, int ovecsize)
-{
-  return pcre_exec(code, extra,
-                   subject.p, subject.n, startoffset,
-                   options, ovector, ovecsize);
-}
 */
 import "C"
 
@@ -57,14 +47,18 @@ func Compile(pattern string) (PCRE, *CompileError) {
 	return toheap(ptr), nil
 }
 
-func (p PCRE) Match(subject string, groups []string) bool {
+var empty = []byte{}
+var nullbyte = []byte{0}
+
+func (p PCRE) Match(subject []byte, groups [][]byte) bool {
 	length := len(subject)
 	if length == 0 {
-		subject = "\000" // make first character adressable
+		subject = nullbyte // make first character adressable
 	}
 	ovector := make([]int, 3 * len(groups))
-	rc := C.go_pcre_exec((*C.pcre)(unsafe.Pointer(&p.ptr[0])), nil,
-		subject, 0, 0,
+	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&p.ptr[0])), nil,
+		(*C.char)(unsafe.Pointer(&subject[0])),
+		C.int(len(subject)), 0, 0,
 		(*C.int)(unsafe.Pointer(&ovector[0])), C.int(len(ovector)))
 	switch rc {
 	case 0:
@@ -77,14 +71,17 @@ func (p PCRE) Match(subject string, groups []string) bool {
 		strconv.Itoa(int(rc)))
 }
 
-func creategroups(groups []string, subject string, ovector []int) {
+func creategroups(groups [][]byte, subject []byte, ovector []int) {
 	for i := range groups {
 		start := ovector[2 * i]
 		end := ovector[2 * i + 1]
-		if start < end {
+		switch {
+		case start < end:
 			groups[i] = subject[start:end]
-		} else {
-			groups[i] = ""
+		case start == end:
+			groups[i] = empty
+		default:
+			groups[i] = nil
 		}
 	}
 }

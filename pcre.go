@@ -47,6 +47,14 @@ func Compile(pattern string) (PCRE, *CompileError) {
 	return toheap(ptr), nil
 }
 
+func MustCompile(pattern string) (p PCRE) {
+	p, err := Compile(pattern)
+	if err != nil {
+		panic(err)
+	}
+	return
+}
+
 var empty = []byte{}
 var nullbyte = []byte{0}
 

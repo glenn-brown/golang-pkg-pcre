@@ -214,11 +214,8 @@ func (m *Matcher) MatchString(subject string, flags int) bool {
 	length := len(subject)
 	m.subjects = subject
 	m.subjectb = nil
-	subjectptr := C.CString(subject)
-	if subjectptr == nil {
-		panic("pcre.MatchString: malloc")
-	}
-	defer C.free(unsafe.Pointer(subjectptr))
+	// The following is a non-portable kludge to avoid a copy
+	subjectptr := *(**C.char)(unsafe.Pointer(&subject))
 	ovectorptr := &m.ovector[0]
 	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&m.pcre.ptr[0])), nil,
 		subjectptr, C.int(length),

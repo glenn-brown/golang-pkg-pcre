@@ -292,6 +292,40 @@ func (m *Matcher) GroupString(group int) string {
 	return ""
 }
 
+func (m *Matcher) name2index(name string) (group int) {
+	if m.re.ptr == nil {
+		panic("Matcher.Named: uninitialized")
+	}
+	name1 := C.CString(name)
+	defer C.free(unsafe.Pointer(name1))
+	group = int(C.pcre_get_stringnumber(
+		(*C.pcre)(unsafe.Pointer(&m.re.ptr[0])), name1))
+	if group < 0 {
+		panic("Matcher.Named: unknown name: " + name)
+	}
+	return
+}
+
+// Returns the value of the named capture group.  This is a nil slice
+// if the capture group is not present.  Panics if the name does not
+// refer to a group.
+func (m *Matcher) Named(group string) []byte {
+	return m.Group(m.name2index(group))
+}
+
+// Returns the value of the named capture group, or an empty string if
+// the capture group is not present.  Panics if the name does not
+// refer to a group.
+func (m *Matcher) NamedString(group string) string {
+	return m.GroupString(m.name2index(group))
+}
+
+// Returns true if the named capture group is present.  Panics if the
+// name does not refer to a group.
+func (m *Matcher) NamedPresent(group string) bool {
+	return m.Present(m.name2index(group))
+}
+
 // A compilation error, as returned by the Compile function.  The
 // offset is the byte position in the pattern string at which the
 // error was detected.

@@ -148,3 +148,23 @@ func TestCaseless(t *testing.T) {
 		t.Error("!CASELESS")
 	}
 }
+
+func TestNamed(t *testing.T) {
+	m := MustCompile("(?<L>a)(?<M>X)*bc(?<DIGITS>\\d*)", 0).
+		MatcherString("abc12", 0)
+	if !m.Matches() {
+		t.Error("Matches")
+	}
+	if !m.NamedPresent("L") {
+		t.Error("NamedPresent(\"L\")")
+	}
+	if m.NamedPresent("M") {
+		t.Error("NamedPresent(\"M\")")
+	}
+	if !m.NamedPresent("DIGITS") {
+		t.Error("NamedPresent(\"DIGITS\")")
+	}
+	if "12" != m.NamedString("DIGITS") {
+		t.Error("NamedString(\"DIGITS\")")
+	}
+}

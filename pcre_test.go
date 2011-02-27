@@ -1,3 +1,5 @@
+// Copyright (C) 2011 Florian Weimer <fw@deneb.enyo.de>
+
 package pcre
 
 import (

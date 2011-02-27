@@ -1,3 +1,5 @@
+// Copyright (C) 2011 Florian Weimer <fw@deneb.enyo.de>
+
 package pcre
 
 /*
@@ -50,17 +52,22 @@ type PCRE struct {
 	ptr []byte
 }
 
+// Number of bytes in the compiled pattern
 func pcresize(ptr *C.pcre) (size C.size_t) {
 	C.pcre_fullinfo(ptr, nil, C.PCRE_INFO_SIZE, unsafe.Pointer(&size))
 	return
 }
 
+// Number of capture groups
 func pcregroups(ptr *C.pcre) (count C.int) {
 	C.pcre_fullinfo(ptr, nil,
 		C.PCRE_INFO_CAPTURECOUNT, unsafe.Pointer(&count))
 	return
 }
 
+// Move pattern to the Go heap so that we do not have to use a
+// finalizer.  PCRE patterns are fully relocatable. (We do not use
+// custom character tables.)
 func toheap(ptr *C.pcre) (p PCRE) {
 	defer C.free(unsafe.Pointer(ptr))
 	size := pcresize(ptr)
@@ -69,6 +76,8 @@ func toheap(ptr *C.pcre) (p PCRE) {
 	return
 }
 
+// Try to compile the pattern.  If an error occurs, the second return
+// value is non-nil.
 func Compile(pattern string, flags int) (PCRE, *CompileError) {
 	pattern1 := C.CString(pattern)
 	defer C.free(unsafe.Pointer(pattern1))
@@ -85,6 +94,7 @@ func Compile(pattern string, flags int) (PCRE, *CompileError) {
 	return toheap(ptr), nil
 }
 
+// Compile the pattern.  If compilation fails, panic.
 func MustCompile(pattern string, flags int) (p PCRE) {
 	p, err := Compile(pattern, flags)
 	if err != nil {
@@ -93,31 +103,42 @@ func MustCompile(pattern string, flags int) (p PCRE) {
 	return
 }
 
+// Returns the number of capture groups in the compiled pattern.
 func (p PCRE) Groups() int {
+	if p.ptr == nil {
+		panic("PCRE.Groups: uninitialized")
+	}
 	return int(pcregroups((*C.pcre)(unsafe.Pointer(&p.ptr[0]))))
 }
 
+// Matcher objects provide a place for storing match results.
+// They can be created by the Matcher and MatcherString functions,
+// or they can be initialized with Reset or ResetString.
 type Matcher struct {
 	pcre PCRE
 	groups int
-	ovector []C.int
-	matches bool
-	subjects string
-	subjectb []byte
+	ovector []C.int		// scratch space for capture offsets
+	matches bool		// last match was successful
+	subjects string // one of these fields is set to record the subject,
+	subjectb []byte // so that Group/GroupString can return slices
 }
 
+// Returns a new matcher object, with the byte array slice as a
+// subject.
 func (p PCRE) Matcher(subject []byte, flags int) (m *Matcher) {
 	m = new(Matcher)
 	m.Reset(p, subject, flags)
 	return
 }
 
+// Returns a new matcher object, with the specified subject string.
 func (p PCRE) MatcherString(subject string, flags int) (m *Matcher) {
 	m = new(Matcher)
 	m.ResetString(p, subject, flags)
 	return
 }
 
+// Switches the matcher object to the specified pattern and subject.
 func (m *Matcher) Reset(p PCRE, subject []byte, flags int) {
 	if p.ptr == nil {
 		panic("PCRE.Matcher: uninitialized")
@@ -126,6 +147,8 @@ func (m *Matcher) Reset(p PCRE, subject []byte, flags int) {
 	m.Match(subject, flags)
 }
 
+// Switches the matcher object to the specified pattern and subject
+// string.
 func (m *Matcher) ResetString(p PCRE, subject string, flags int) {
 	if p.ptr == nil {
 		panic("PCRE.Matcher: uninitialized")
@@ -149,6 +172,8 @@ func (m *Matcher) init(p PCRE) {
 
 var nullbyte = []byte{0}
 
+// Tries to match the speficied byte array slice to the current
+// pattern.  Returns true if the match succeeds.
 func (m *Matcher) Match(subject []byte, flags int) bool {
 	if m.pcre.ptr == nil {
 		panic("Matcher.Match: uninitialized")
@@ -167,6 +192,8 @@ func (m *Matcher) Match(subject []byte, flags int) bool {
 	return m.match(rc)
 }
 
+// Tries to match the speficied subject string to the current pattern.
+// Returns true if the match succeeds.
 func (m *Matcher) MatchString(subject string, flags int) bool {
 	if m.pcre.ptr == nil {
 		panic("Matcher.Match: uninitialized")
@@ -195,29 +222,34 @@ func (m *Matcher) match(rc C.int) bool {
 		m.matches = false
 		return false
 	}
-	panic("unexepcted return code from pcre_exec: " +
+	panic("unexepected return code from pcre_exec: " +
 		strconv.Itoa(int(rc)))
 }
 
+// Returns true if a previous call to Matcher, MatcherString, Reset,
+// ResetString, Match or MatchString succeeded.
 func (m *Matcher) Matches() bool {
 	return m.matches
 }
 
+// Returns the number of groups in the current pattern.
 func (m *Matcher) Groups() int {
 	return m.groups
 }
 
-// Returns true if the numbered capture group is present.  Group
-// numbers start at 1.  A capture group can be present and match the
-// empty string.
+// Returns true if the numbered capture group is present in the last
+// match (performed by Matcher, MatcherString, Reset, ResetString,
+// Match, or MatchString).  Group numbers start at 1.  A capture group
+// can be present and match the empty string.
 func (m *Matcher) Present(group int) bool {
 	return m.ovector[2 * group] >= 0
 }
 
-// Returns the numbered capture group.  Group 0 is the part of the
-// subject which matches the whole pattern; the first actual capture
-// group is numbered 1.  Capture groups which are not present return a
-// nil slice.
+// Returns the numbered capture group of the last match (performed by
+// Matcher, MatcherString, Reset, ResetString, Match, or MatchString).
+// Group 0 is the part of the subject which matches the whole pattern;
+// the first actual capture group is numbered 1.  Capture groups which
+// are not present return a nil slice.
 func (m *Matcher) Group(group int) []byte {
 	start := m.ovector[2 * group]
 	end := m.ovector[2 * group + 1]
@@ -246,6 +278,9 @@ func (m *Matcher) GroupString(group int) string {
 	return ""
 }
 
+// A compilation error, as returned by the Compile function.  The
+// offset is the byte position in the pattern string at which the
+// error was detected.
 type CompileError struct {
 	Pattern string
 	Message string

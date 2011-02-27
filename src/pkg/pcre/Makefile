@@ -8,5 +8,5 @@ CGOFILES=\
 include $(GOROOT)/src/Make.pkg
 
 .PHONY: install-debian
-install-debian: _obj/$(TARG).a
-	install -D _obj/$(TARG).a debian/golang-pkg-$(TARG)/$(pkgdir)/$(TARG).a 
+install-debian:
+	install -D _obj/$(TARG).a $(DESTDIR)/$(pkgdir)/$(TARG).a 

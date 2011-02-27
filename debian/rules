@@ -3,9 +3,10 @@
 	dh $@
 
 override_dh_auto_build:
-	gomake
+	gomake -C src/pkg/pcre
 
 override_dh_auto_install:
-	gomake install-debian
-	install -D pcre.go debian/golang-pkg-pcre/usr/lib/golang/src/pkg/pcre/pcre.go
-
+	gomake -C src/pkg/pcre DESTDIR=$(CURDIR)/debian/golang-pkg-pcre \
+	  install-debian
+	install -D src/pkg/pcre/pcre.go \
+	  debian/golang-pkg-pcre/usr/lib/golang/src/pkg/pcre/pcre.go

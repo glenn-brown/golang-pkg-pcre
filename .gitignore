@@ -1,5 +1,8 @@
 *.o
-*.6
+[0-9].out
+/*.[0-9]
 *.cgo?.*
 /_cgo_*
 /_obj
+/_test
+/_testmain.go

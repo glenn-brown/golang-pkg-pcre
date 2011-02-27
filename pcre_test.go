@@ -6,7 +6,7 @@ import (
 
 func TestCompile(t *testing.T) {
 	var check = func (p string, groups int) {
-		re, err := Compile(p)
+		re, err := Compile(p, 0)
 		if err != nil {
 			t.Error(p, err)
 		}
@@ -24,7 +24,7 @@ func TestCompile(t *testing.T) {
 
 func TestCompileFail(t *testing.T) {
 	var check = func (p, msg string, off int) {
-		_, err := Compile(p)
+		_, err := Compile(p, 0)
 		switch {
 		case err == nil:
 			t.Error(p)
@@ -61,14 +61,14 @@ func equal(l, r []string) bool {
 
 func checkmatch1(t *testing.T, dostring bool, pattern, subject string,
 	args ...interface{}) {
-	re := MustCompile(pattern)
+	re := MustCompile(pattern, 0)
 	var m *Matcher
 	var prefix string
 	if dostring {
-		m = re.MatcherString(subject)
+		m = re.MatcherString(subject, 0)
 		prefix = "string"
 	} else {
-		m = re.Matcher([]byte(subject))
+		m = re.Matcher([]byte(subject), 0)
 		prefix = "[]byte"
 	}
 	if len(args) == 0 {
@@ -122,4 +122,15 @@ func TestMatcher(t *testing.T) {
 	check(`^.*$`, "abc", "abc")
 	check(`^.*$`, "a\000c", "a\000c")
 	check(`^(.*)$`, "a\000c", "a\000c", "a\000c")
+}
+
+func TestCaseless(t *testing.T) {
+	m := MustCompile("abc", CASELESS).MatcherString("Abc", 0)
+	if !m.Matches() {
+		t.Error("CASELESS")
+	}
+	m = MustCompile("abc", 0).MatcherString("Abc", 0)
+	if m.Matches() {
+		t.Error("!CASELESS")
+	}
 }

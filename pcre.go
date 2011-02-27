@@ -12,7 +12,39 @@ import (
 	"unsafe"
 )
 
+// Flags for Compile and Match functions
 const ANCHORED = C.PCRE_ANCHORED
+const BSR_ANYCRLF = C.PCRE_BSR_ANYCRLF
+const BSR_UNICODE = C.PCRE_BSR_UNICODE
+const NEWLINE_ANY = C.PCRE_NEWLINE_ANY
+const NEWLINE_ANYCRLF = C.PCRE_NEWLINE_ANYCRLF
+const NEWLINE_CR = C.PCRE_NEWLINE_CR
+const NEWLINE_CRLF = C.PCRE_NEWLINE_CRLF
+const NEWLINE_LF = C.PCRE_NEWLINE_LF
+const NO_UTF8_CHECK = C.PCRE_NO_UTF8_CHECK
+
+// Flags for Compile functions
+const CASELESS = C.PCRE_CASELESS
+const DOLLAR_ENDONLY = C.PCRE_DOLLAR_ENDONLY
+const DOTALL = C.PCRE_DOTALL
+const DUPNAMES = C.PCRE_DUPNAMES
+const EXTENDED = C.PCRE_EXTENDED
+const EXTRA = C.PCRE_EXTRA
+const FIRSTLINE = C.PCRE_FIRSTLINE
+const JAVASCRIPT_COMPAT = C.PCRE_JAVASCRIPT_COMPAT
+const MULTILINE = C.PCRE_MULTILINE
+const NO_AUTO_CAPTURE = C.PCRE_NO_AUTO_CAPTURE
+const UNGREEDY = C.PCRE_UNGREEDY
+const UTF8 = C.PCRE_UTF8
+
+// Flags for Match functions
+const NOTBOL = C.PCRE_NOTBOL 
+const NOTEOL = C.PCRE_NOTEOL
+const NOTEMPTY = C.PCRE_NOTEMPTY
+const NOTEMPTY_ATSTART = C.PCRE_NOTEMPTY_ATSTART
+const NO_START_OPTIMIZE = C.PCRE_NO_START_OPTIMIZE
+const PARTIAL_HARD = C.PCRE_PARTIAL_HARD
+const PARTIAL_SOFT = C.PCRE_PARTIAL_SOFT
 
 type PCRE struct {
 	ptr []byte
@@ -37,12 +69,12 @@ func toheap(ptr *C.pcre) (p PCRE) {
 	return
 }
 
-func Compile(pattern string) (PCRE, *CompileError) {
+func Compile(pattern string, flags int) (PCRE, *CompileError) {
 	pattern1 := C.CString(pattern)
 	defer C.free(unsafe.Pointer(pattern1))
 	var errptr *C.char
 	var erroffset C.int
-	ptr := C.pcre_compile(pattern1, 0, &errptr, &erroffset, nil)
+	ptr := C.pcre_compile(pattern1, C.int(flags), &errptr, &erroffset, nil)
 	if ptr == nil {
 		return PCRE{}, &CompileError{
 		        Pattern: pattern,
@@ -53,8 +85,8 @@ func Compile(pattern string) (PCRE, *CompileError) {
 	return toheap(ptr), nil
 }
 
-func MustCompile(pattern string) (p PCRE) {
-	p, err := Compile(pattern)
+func MustCompile(pattern string, flags int) (p PCRE) {
+	p, err := Compile(pattern, flags)
 	if err != nil {
 		panic(err)
 	}
@@ -74,32 +106,32 @@ type Matcher struct {
 	subjectb []byte
 }
 
-func (p PCRE) Matcher(subject []byte) (m *Matcher) {
+func (p PCRE) Matcher(subject []byte, flags int) (m *Matcher) {
 	m = new(Matcher)
-	m.Reset(p, subject)
+	m.Reset(p, subject, flags)
 	return
 }
 
-func (p PCRE) MatcherString(subject string) (m *Matcher) {
+func (p PCRE) MatcherString(subject string, flags int) (m *Matcher) {
 	m = new(Matcher)
-	m.ResetString(p, subject)
+	m.ResetString(p, subject, flags)
 	return
 }
 
-func (m *Matcher) Reset(p PCRE, subject []byte) {
+func (m *Matcher) Reset(p PCRE, subject []byte, flags int) {
 	if p.ptr == nil {
 		panic("PCRE.Matcher: uninitialized")
 	}
 	m.init(p)
-	m.Match(subject)
+	m.Match(subject, flags)
 }
 
-func (m *Matcher) ResetString(p PCRE, subject string) {
+func (m *Matcher) ResetString(p PCRE, subject string, flags int) {
 	if p.ptr == nil {
 		panic("PCRE.Matcher: uninitialized")
 	}
 	m.init(p)
-	m.MatchString(subject)
+	m.MatchString(subject, flags)
 }
 
 func (m *Matcher) init(p PCRE) {
@@ -117,7 +149,7 @@ func (m *Matcher) init(p PCRE) {
 
 var nullbyte = []byte{0}
 
-func (m *Matcher) Match(subject []byte) bool {
+func (m *Matcher) Match(subject []byte, flags int) bool {
 	if m.pcre.ptr == nil {
 		panic("Matcher.Match: uninitialized")
 	}
@@ -131,11 +163,11 @@ func (m *Matcher) Match(subject []byte) bool {
 	ovectorptr := &m.ovector[0]
 	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&m.pcre.ptr[0])), nil,
 		subjectptr, C.int(length),
-		0, 0, ovectorptr, C.int(len(m.ovector)))
+		0, C.int(flags), ovectorptr, C.int(len(m.ovector)))
 	return m.match(rc)
 }
 
-func (m *Matcher) MatchString(subject string) bool {
+func (m *Matcher) MatchString(subject string, flags int) bool {
 	if m.pcre.ptr == nil {
 		panic("Matcher.Match: uninitialized")
 	}
@@ -150,7 +182,7 @@ func (m *Matcher) MatchString(subject string) bool {
 	ovectorptr := &m.ovector[0]
 	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&m.pcre.ptr[0])), nil,
 		subjectptr, C.int(length),
-		0, 0, ovectorptr, C.int(len(m.ovector)))
+		0, C.int(flags), ovectorptr, C.int(len(m.ovector)))
 	return m.match(rc)
 }
 

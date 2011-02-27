@@ -7,3 +7,5 @@ override_dh_auto_build:
 
 override_dh_auto_install:
 	gomake install-debian
+	install -D pcre.go debian/golang-pkg-pcre/usr/lib/golang/src/pkg/pcre/pcre.go
+

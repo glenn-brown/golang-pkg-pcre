@@ -22,6 +22,23 @@ func TestCompile(t *testing.T) {
 	check("((?:))", 1)
 }
 
+func TestCompileFail(t *testing.T) {
+	var check = func (p, msg string, off int) {
+		_, err := Compile(p)
+		switch {
+		case err == nil:
+			t.Error(p)
+		case err.Message != msg:
+			t.Error(p, "Message", err.Message)
+		case err.Offset != off:
+			t.Error(p, "Offset", err.Offset)
+		}
+	}
+	check("(", "missing )", 1)
+	check("\\", "\\ at end of pattern", 1)
+	check("abc\\", "\\ at end of pattern", 4)
+}
+
 func strings(b [][]byte) (r []string) {
 	r = make([]string, len(b))
 	for i, v := range b {

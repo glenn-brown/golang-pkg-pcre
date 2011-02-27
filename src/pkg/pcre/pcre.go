@@ -233,6 +233,8 @@ func (m *Matcher) match(subjectptr *C.char, length, flags int) bool {
 	case rc == C.PCRE_ERROR_NOMATCH:
 		m.matches = false
 		return false
+	case rc == C.PCRE_ERROR_BADOPTION:
+		panic("PCRE.Match: invalid option flag")
 	}
 	panic("unexepected return code from pcre_exec: " +
 		strconv.Itoa(int(rc)))

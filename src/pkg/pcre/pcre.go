@@ -180,7 +180,9 @@ func (m *Matcher) init(p PCRE) {
 	}
 	m.pcre = p
 	m.groups = p.Groups()
-	m.ovector = make([]C.int, 3 * (1 + m.groups))
+	if ovectorlen := 3 * (1 + m.groups); len(m.ovector) < ovectorlen {
+		m.ovector = make([]C.int, ovectorlen)
+	}
 }
 
 var nullbyte = []byte{0}

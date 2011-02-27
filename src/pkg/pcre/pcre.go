@@ -54,7 +54,9 @@ const (
 	PARTIAL_SOFT = C.PCRE_PARTIAL_SOFT
 )
 
-type PCRE struct {
+// A reference to a compiled regular expression.
+// Use Compile or MustCompile to create such objects.
+type Regexp struct {
 	ptr []byte
 }
 
@@ -74,21 +76,21 @@ func pcregroups(ptr *C.pcre) (count C.int) {
 // Move pattern to the Go heap so that we do not have to use a
 // finalizer.  PCRE patterns are fully relocatable. (We do not use
 // custom character tables.)
-func toheap(ptr *C.pcre) (p PCRE) {
+func toheap(ptr *C.pcre) (re Regexp) {
 	defer C.free(unsafe.Pointer(ptr))
 	size := pcresize(ptr)
-	p.ptr = make([]byte, size)
-	C.memcpy(unsafe.Pointer(&p.ptr[0]), unsafe.Pointer(ptr), size)
+	re.ptr = make([]byte, size)
+	C.memcpy(unsafe.Pointer(&re.ptr[0]), unsafe.Pointer(ptr), size)
 	return
 }
 
 // Try to compile the pattern.  If an error occurs, the second return
 // value is non-nil.
-func Compile(pattern string, flags int) (PCRE, *CompileError) {
+func Compile(pattern string, flags int) (Regexp, *CompileError) {
 	pattern1 := C.CString(pattern)
 	defer C.free(unsafe.Pointer(pattern1))
 	if clen := int(C.strlen(pattern1)); clen != len(pattern) {
-		return PCRE{}, &CompileError{
+		return Regexp{}, &CompileError{
 			Pattern: pattern,
 			Message: "NUL byte in pattern",
 			Offset: clen,
@@ -98,7 +100,7 @@ func Compile(pattern string, flags int) (PCRE, *CompileError) {
 	var erroffset C.int
 	ptr := C.pcre_compile(pattern1, C.int(flags), &errptr, &erroffset, nil)
 	if ptr == nil {
-		return PCRE{}, &CompileError{
+		return Regexp{}, &CompileError{
 		        Pattern: pattern,
 		        Message: C.GoString(errptr),
 		        Offset: int(erroffset),
@@ -108,8 +110,8 @@ func Compile(pattern string, flags int) (PCRE, *CompileError) {
 }
 
 // Compile the pattern.  If compilation fails, panic.
-func MustCompile(pattern string, flags int) (p PCRE) {
-	p, err := Compile(pattern, flags)
+func MustCompile(pattern string, flags int) (re Regexp) {
+	re, err := Compile(pattern, flags)
 	if err != nil {
 		panic(err)
 	}
@@ -117,18 +119,18 @@ func MustCompile(pattern string, flags int) (p PCRE) {
 }
 
 // Returns the number of capture groups in the compiled pattern.
-func (p PCRE) Groups() int {
-	if p.ptr == nil {
-		panic("PCRE.Groups: uninitialized")
+func (re Regexp) Groups() int {
+	if re.ptr == nil {
+		panic("Regexp.Groups: uninitialized")
 	}
-	return int(pcregroups((*C.pcre)(unsafe.Pointer(&p.ptr[0]))))
+	return int(pcregroups((*C.pcre)(unsafe.Pointer(&re.ptr[0]))))
 }
 
 // Matcher objects provide a place for storing match results.
 // They can be created by the Matcher and MatcherString functions,
 // or they can be initialized with Reset or ResetString.
 type Matcher struct {
-	pcre PCRE
+	re Regexp
 	groups int
 	ovector []C.int		// scratch space for capture offsets
 	matches bool		// last match was successful
@@ -138,48 +140,48 @@ type Matcher struct {
 
 // Returns a new matcher object, with the byte array slice as a
 // subject.
-func (p PCRE) Matcher(subject []byte, flags int) (m *Matcher) {
+func (re Regexp) Matcher(subject []byte, flags int) (m *Matcher) {
 	m = new(Matcher)
-	m.Reset(p, subject, flags)
+	m.Reset(re, subject, flags)
 	return
 }
 
 // Returns a new matcher object, with the specified subject string.
-func (p PCRE) MatcherString(subject string, flags int) (m *Matcher) {
+func (re Regexp) MatcherString(subject string, flags int) (m *Matcher) {
 	m = new(Matcher)
-	m.ResetString(p, subject, flags)
+	m.ResetString(re, subject, flags)
 	return
 }
 
 // Switches the matcher object to the specified pattern and subject.
-func (m *Matcher) Reset(p PCRE, subject []byte, flags int) {
-	if p.ptr == nil {
-		panic("PCRE.Matcher: uninitialized")
+func (m *Matcher) Reset(re Regexp, subject []byte, flags int) {
+	if re.ptr == nil {
+		panic("Regexp.Matcher: uninitialized")
 	}
-	m.init(p)
+	m.init(re)
 	m.Match(subject, flags)
 }
 
 // Switches the matcher object to the specified pattern and subject
 // string.
-func (m *Matcher) ResetString(p PCRE, subject string, flags int) {
-	if p.ptr == nil {
-		panic("PCRE.Matcher: uninitialized")
+func (m *Matcher) ResetString(re Regexp, subject string, flags int) {
+	if re.ptr == nil {
+		panic("Regexp.Matcher: uninitialized")
 	}
-	m.init(p)
+	m.init(re)
 	m.MatchString(subject, flags)
 }
 
-func (m *Matcher) init(p PCRE) {
+func (m *Matcher) init(re Regexp) {
 	m.matches = false
-	if m.pcre.ptr != nil && &m.pcre.ptr[0] == &p.ptr[0] {
+	if m.re.ptr != nil && &m.re.ptr[0] == &re.ptr[0] {
 		// Skip group count extraction if the matcher has
 		// already been initialized with the same regular
 		// expression.
 		return
 	}
-	m.pcre = p
-	m.groups = p.Groups()
+	m.re = re
+	m.groups = re.Groups()
 	if ovectorlen := 3 * (1 + m.groups); len(m.ovector) < ovectorlen {
 		m.ovector = make([]C.int, ovectorlen)
 	}
@@ -190,7 +192,7 @@ var nullbyte = []byte{0}
 // Tries to match the speficied byte array slice to the current
 // pattern.  Returns true if the match succeeds.
 func (m *Matcher) Match(subject []byte, flags int) bool {
-	if m.pcre.ptr == nil {
+	if m.re.ptr == nil {
 		panic("Matcher.Match: uninitialized")
 	}
 	length := len(subject)
@@ -206,7 +208,7 @@ func (m *Matcher) Match(subject []byte, flags int) bool {
 // Tries to match the speficied subject string to the current pattern.
 // Returns true if the match succeeds.
 func (m *Matcher) MatchString(subject string, flags int) bool {
-	if m.pcre.ptr == nil {
+	if m.re.ptr == nil {
 		panic("Matcher.Match: uninitialized")
 	}
 	length := len(subject)
@@ -221,7 +223,7 @@ func (m *Matcher) MatchString(subject string, flags int) bool {
 }
 
 func (m *Matcher) match(subjectptr *C.char, length, flags int) bool {
-	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&m.pcre.ptr[0])), nil,
+	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&m.re.ptr[0])), nil,
 		subjectptr, C.int(length),
 		0, C.int(flags), &m.ovector[0], C.int(len(m.ovector)))
 	switch {

@@ -63,16 +63,23 @@ func equal(l, r []string) bool {
 	return true
 }
 
-func checkmatch1(t *testing.T, dostring bool, pattern, subject string,
-	args ...interface{}) {
+func checkmatch1(t *testing.T, dostring bool, m *Matcher,
+	pattern, subject string, args ...interface{}) {
 	re := MustCompile(pattern, 0)
-	var m *Matcher
 	var prefix string
 	if dostring {
-		m = re.MatcherString(subject, 0)
+		if m == nil {
+			m = re.MatcherString(subject, 0)
+		} else {
+			m.ResetString(re, subject, 0)
+		}
 		prefix = "string"
 	} else {
-		m = re.Matcher([]byte(subject), 0)
+		if m == nil {
+			m = re.Matcher([]byte(subject), 0)
+		} else {
+			m.Reset(re, []byte(subject), 0)
+		}
 		prefix = "[]byte"
 	}
 	if len(args) == 0 {
@@ -114,9 +121,12 @@ func checkmatch1(t *testing.T, dostring bool, pattern, subject string,
 }
 
 func TestMatcher(t *testing.T) {
+	var m Matcher
 	check := func(pattern, subject string, args ...interface{}) {
-		checkmatch1(t, false, pattern, subject, args...)
-		checkmatch1(t, true, pattern, subject, args...)
+		checkmatch1(t, false, nil, pattern, subject, args...)
+		checkmatch1(t, true, nil, pattern, subject, args...)
+		checkmatch1(t, false, &m, pattern, subject, args...)
+		checkmatch1(t, true, &m, pattern, subject, args...)
 	}
 
 	check(`^$`, "", "")

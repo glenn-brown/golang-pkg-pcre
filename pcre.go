@@ -63,34 +63,39 @@ func (p PCRE) Match(subject []byte, groups [][]byte) bool {
 	if length == 0 {
 		subject = nullbyte // make first character adressable
 	}
-	ovector := make([]int, 3 * len(groups))
+	var ovector []C.int
+	var ovectorptr *C.int
+	if len(groups) > 0 {
+		ovector = make([]C.int, 3 * len(groups))
+		ovectorptr = &ovector[0]
+	}
 	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&p.ptr[0])), nil,
 		(*C.char)(unsafe.Pointer(&subject[0])),
-		C.int(len(subject)), 0, 0,
-		(*C.int)(unsafe.Pointer(&ovector[0])), C.int(len(ovector)))
-	switch rc {
-	case 0:
-		creategroups(groups, subject, ovector)
+		C.int(length), 0, 0,
+		ovectorptr, C.int(len(ovector)))
+	switch{
+	case rc >= 0:
+		creategroups(groups, subject, ovector, int(rc))
 		return true
-	case C.PCRE_ERROR_NOMATCH:
+	case rc == C.PCRE_ERROR_NOMATCH:
 		return false
 	}
 	panic("unexepcted return code from pcre_exec: " +
 		strconv.Itoa(int(rc)))
 }
 
-func creategroups(groups [][]byte, subject []byte, ovector []int) {
-	for i := range groups {
+func creategroups(groups [][]byte, subject []byte, ovector []C.int, count int) {
+	for i := 0; i < count; i++ {
 		start := ovector[2 * i]
 		end := ovector[2 * i + 1]
-		switch {
-		case start < end:
-			groups[i] = subject[start:end]
-		case start == end:
-			groups[i] = empty
-		default:
+		if start == -1 {
 			groups[i] = nil
+		} else {
+			groups[i] = subject[start:end]
 		}
+	}
+	for i := count; i < len(groups); i++{
+		groups[i] = nil
 	}
 }
 

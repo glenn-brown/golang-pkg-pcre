@@ -1,0 +1,6 @@
+golang-pkg-pcre (1) unstable; urgency=low
+
+  * Initial version
+
+ -- Florian Weimer <fw@deneb.enyo.de>  Sat, 26 Feb 2011 20:39:33 +0100
+

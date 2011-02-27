@@ -1,0 +1,5 @@
+*.debhelper
+*.log
+*.substvars
+/files
+/golang-pkg-pcre

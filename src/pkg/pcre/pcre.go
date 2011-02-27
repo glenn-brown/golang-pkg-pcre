@@ -198,11 +198,7 @@ func (m *Matcher) Match(subject []byte, flags int) bool {
 		subject = nullbyte // make first character adressable
 	}
 	subjectptr := (*C.char)(unsafe.Pointer(&subject[0]))
-	ovectorptr := &m.ovector[0]
-	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&m.pcre.ptr[0])), nil,
-		subjectptr, C.int(length),
-		0, C.int(flags), ovectorptr, C.int(len(m.ovector)))
-	return m.match(rc)
+	return m.match(subjectptr, length, flags)
 }
 
 // Tries to match the speficied subject string to the current pattern.
@@ -214,17 +210,19 @@ func (m *Matcher) MatchString(subject string, flags int) bool {
 	length := len(subject)
 	m.subjects = subject
 	m.subjectb = nil
+	if length == 0 {
+		subject = "\000" // make first character addressable
+	}
 	// The following is a non-portable kludge to avoid a copy
 	subjectptr := *(**C.char)(unsafe.Pointer(&subject))
-	ovectorptr := &m.ovector[0]
-	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&m.pcre.ptr[0])), nil,
-		subjectptr, C.int(length),
-		0, C.int(flags), ovectorptr, C.int(len(m.ovector)))
-	return m.match(rc)
+	return m.match(subjectptr, length, flags)
 }
 
-func (m *Matcher) match(rc C.int) bool {
-	switch{
+func (m *Matcher) match(subjectptr *C.char, length, flags int) bool {
+	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&m.pcre.ptr[0])), nil,
+		subjectptr, C.int(length),
+		0, C.int(flags), &m.ovector[0], C.int(len(m.ovector)))
+	switch {
 	case rc >= 0:
 		m.matches = true
 		return true

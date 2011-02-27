@@ -81,6 +81,13 @@ func toheap(ptr *C.pcre) (p PCRE) {
 func Compile(pattern string, flags int) (PCRE, *CompileError) {
 	pattern1 := C.CString(pattern)
 	defer C.free(unsafe.Pointer(pattern1))
+	if clen := int(C.strlen(pattern1)); clen != len(pattern) {
+		return PCRE{}, &CompileError{
+			Pattern: pattern,
+			Message: "NUL byte in pattern",
+			Offset: clen,
+		}
+	}
 	var errptr *C.char
 	var erroffset C.int
 	ptr := C.pcre_compile(pattern1, C.int(flags), &errptr, &erroffset, nil)

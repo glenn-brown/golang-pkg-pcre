@@ -39,6 +39,8 @@ func TestCompileFail(t *testing.T) {
 	check("(", "missing )", 1)
 	check("\\", "\\ at end of pattern", 1)
 	check("abc\\", "\\ at end of pattern", 4)
+	check("abc\000", "NUL byte in pattern", 3)
+	check("a\000bc", "NUL byte in pattern", 1)
 }
 
 func strings(b [][]byte) (r []string) {

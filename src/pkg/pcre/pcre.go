@@ -277,7 +277,7 @@ func (m *Matcher) Group(group int) []byte {
 // Returns the numbered capture group as a string.  Group 0 is the
 // part of the subject which matches the whole pattern; the first
 // actual capture group is numbered 1.  Capture groups which are not
-// present return a nil slice.
+// present return an empty string.
 func (m *Matcher) GroupString(group int) string {
 	start := m.ovector[2 * group]
 	end := m.ovector[2 * group + 1]

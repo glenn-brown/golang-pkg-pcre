@@ -1,21 +1,25 @@
 package pcre
 
 import (
-	"reflect"
 	"testing"
 )
 
 func TestCompile(t *testing.T) {
-	var check = func (p string) {
-		_, err := Compile(p)
+	var check = func (p string, groups int) {
+		re, err := Compile(p)
 		if err != nil {
 			t.Error(p, err)
 		}
+		if g := re.Groups(); g != groups {
+			t.Error(p, g)
+		}
 	}
-	check("")
-	check("^")
-	check("^$")
-	check("()")
+	check("",0 )
+	check("^", 0)
+	check("^$", 0)
+	check("()", 1)
+	check("(())", 2)
+	check("((?:))", 1)
 }
 
 func strings(b [][]byte) (r []string) {
@@ -38,33 +42,49 @@ func equal(l, r []string) bool {
 	return true
 }
 
-func TestMatch(t *testing.T) {
-	if !MustCompile("^$").Match([]byte(""), [][]byte{}) {
-		t.Error("empty")
+func TestMatcher(t *testing.T) {
+	check := func (pattern, subject string, args ...interface{}) {
+		re := MustCompile(pattern)
+		m := re.Matcher([]byte(subject))
+		if len(args) == 0 {
+			if m.Matches() {
+				t.Error(pattern, subject, "!Matches")
+			}
+		} else {
+			if !m.Matches() {
+				t.Error(pattern, subject, "Matches")
+				return
+			}
+			if m.Groups() != len(args) - 1 {
+				t.Error(pattern, subject, "Groups", m.Groups())
+				return
+			}
+			for i, arg := range args {
+				if s, ok := arg.(string); ok {
+					if !m.Present(i) {
+						t.Error(pattern, subject,
+							"Present", i)
+
+					}
+					if s != string(m.Group(i)) {
+						t.Error(pattern, subject,
+							"Group", i, s)
+					}
+					if s != m.GroupString(i) {
+						t.Error(pattern, subject,
+							"GroupString", i, s)
+					}
+				} else {
+					if m.Present(i) {
+						t.Error(pattern, subject,
+							"!Present", i)
+					}
+				}
+			}
+		}
 	}
-	if !MustCompile("^$").Match([]byte(""), nil) {
-		t.Error("empty/nil")
-	}
-	s1 := make([][]byte, 1)
-	s2 := make([][]byte, 2)
-	s3 := make([][]byte, 3)
-	if !MustCompile("^abc$").Match([]byte("abc"), s1) {
-		t.Error("abc")
-	}
-	if !equal(strings(s1), []string{"abc"}) {
-		t.Error("abc", s1)
-	}
-	s2[1] = []byte{65}
-	if !MustCompile("^abc$").Match([]byte("abc"), s2) {
-		t.Error("abc")
-	}
-	if !reflect.DeepEqual(s2, [][]byte{[]byte("abc"), nil}) {
-		t.Error("abc", s2)
-	}
-	if !MustCompile("^(X)*ab(c)$").Match([]byte("abc"), s3) {
-		t.Error("^(X)*abc$")
-	}
-	if !reflect.DeepEqual(s3, [][]byte{[]byte("abc"), nil, []byte("c")}) {
-		t.Error("^(X)*abc$", s3)
-	}
+
+	check(`^$`, "", "")
+	check(`^abc$`, "abc", "abc")
+	check(`^(X)*ab()c$`, "abc", "abc", nil, "")
 }

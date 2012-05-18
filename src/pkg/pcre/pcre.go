@@ -370,6 +370,27 @@ func (m *Matcher) NamedPresent(group string) bool {
 	return m.Present(m.name2index(group))
 }
 
+// Return the start and end of the first match, or nil if no match.
+// loc[0] is the start and loc[1] is the end.
+func (re *Regexp) FindIndex(bytes []byte, flags int) []int {
+	m := re.Matcher(bytes, flags)
+	if m.Match(bytes, flags) {
+		return []int{int(m.ovector[0]), int(m.ovector[1])}
+	}
+	return nil
+}
+
+// Return a copy of a byte slice with pattern matches replaced by repl.
+func (re Regexp) ReplaceAll(bytes, repl []byte, flags int) []byte {
+	m := re.Matcher(bytes, 0)
+	r := []byte{}
+	for m.Match(bytes, flags) {
+		r = append (append (r, bytes[:m.ovector[0]]...), repl...)
+		bytes = bytes[m.ovector[1]:]
+	}
+	return append (r, bytes...)
+}
+
 // A compilation error, as returned by the Compile function.  The
 // offset is the byte position in the pattern string at which the
 // error was detected.

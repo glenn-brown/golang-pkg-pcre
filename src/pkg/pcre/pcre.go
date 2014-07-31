@@ -337,6 +337,17 @@ func (m *Matcher) GroupString(group int) string {
 	return ""
 }
 
+// Index returns the start and end of the first match, if a previous
+// call to Matcher, MatcherString, Reset, ResetString, Match or
+// MatchString succeeded. loc[0] is the start and loc[1] is the end.
+func (m *Matcher) Index() []int {
+	if !m.Matches() {
+		return nil
+	}
+
+	return []int{int(m.ovector[0]), int(m.ovector[1])}
+}
+
 func (m *Matcher) name2index(name string) (group int) {
 	if m.re.ptr == nil {
 		panic("Matcher.Named: uninitialized")
@@ -375,7 +386,7 @@ func (m *Matcher) NamedPresent(group string) bool {
 // loc[0] is the start and loc[1] is the end.
 func (re *Regexp) FindIndex(bytes []byte, flags int) []int {
 	m := re.Matcher(bytes, flags)
-	if m.Match(bytes, flags) {
+	if m.Matches() {
 		return []int{int(m.ovector[0]), int(m.ovector[1])}
 	}
 	return nil

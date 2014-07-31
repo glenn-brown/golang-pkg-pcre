@@ -169,6 +169,23 @@ func TestNamed(t *testing.T) {
 	}
 }
 
+func TestMatcherIndex(t *testing.T) {
+	m := MustCompile("bcd", 0).Matcher([]byte("abcdef"), 0)
+	i := m.Index()
+	if i[0] != 1 {
+		t.Error("FindIndex start", i[0])
+	}
+	if i[1] != 4 {
+		t.Error("FindIndex end", i[1])
+	}
+
+	m = MustCompile("xyz", 0).Matcher([]byte("abcdef"), 0)
+	i = m.Index()
+	if i != nil {
+		t.Error("Index returned for non-match", i)
+	}
+}
+
 func TestFindIndex(t *testing.T) {
 	re := MustCompile("bcd", 0)
 	i := re.FindIndex([]byte("abcdef"), 0)

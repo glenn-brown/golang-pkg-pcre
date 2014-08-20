@@ -321,16 +321,16 @@ func (m *Matcher) Group(group int) []byte {
 	return nil
 }
 
-func (m *Matcher) Extract() []string {
+func (m *Matcher) ExtractString() []string {
 	if m.matches {
 		captured_texts := make([]string, m.groups+1)
 		captured_texts[0] = m.subjects
-		//fmt.Printf("capture: %v\n", m.subjects)
+		//fmt.Printf("capture(%d): %v\n", len(m.subjectb), m.subjects)
 		for i := 1; i < m.groups+1; i++ {
 			start := m.ovector[2*i]
 			end := m.ovector[2*i+1]
 
-			//fmt.Printf("start: %v, end: %v\n", start, end)
+			// fmt.Printf("start: %v, end: %v\n", start, end)
 			captured_text := m.subjects[start:end]
 			captured_texts[i] = captured_text
 		}

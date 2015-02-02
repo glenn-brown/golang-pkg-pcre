@@ -183,7 +183,7 @@ func TestFindIndex(t *testing.T) {
 func TestExtract(t *testing.T) {
 	re := MustCompile("b(c)(d)", 0)
 	m := re.MatcherString("abcdef", 0)
-	i := m.Extract()
+	i := m.ExtractString()
 	if i[0] != "abcdef" {
 		t.Error("Full line unavailable: ", i[0])
 	}

@@ -198,7 +198,8 @@ func TestNamed(t *testing.T) {
 	if !m.NamedPresent("DIGITS") {
 		t.Error("NamedPresent(\"DIGITS\")")
 	}
-	if "12" != m.NamedString("DIGITS") {
+	group, err := m.NamedString("DIGITS")
+	if err != nil || "12" != group {
 		t.Error("NamedString(\"DIGITS\")")
 	}
 }

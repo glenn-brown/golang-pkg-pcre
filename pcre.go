@@ -55,6 +55,7 @@ package pcre
 import "C"
 
 import (
+	"fmt"
 	"strconv"
 	"unsafe"
 )
@@ -418,16 +419,18 @@ func (m *Matcher) Index() []int {
 	return []int{int(m.ovector[0]), int(m.ovector[1])}
 }
 
-func (m *Matcher) name2index(name string) (group int) {
+func (m *Matcher) name2index(name string) (group int, err error) {
 	if m.re.ptr == nil {
-		panic("Matcher.Named: uninitialized")
+		err = fmt.Errorf("Matcher.Named: uninitialized")
+		return
 	}
 	name1 := C.CString(name)
 	defer C.free(unsafe.Pointer(name1))
 	group = int(C.pcre_get_stringnumber(
 		(*C.pcre)(unsafe.Pointer(&m.re.ptr[0])), name1))
 	if group < 0 {
-		panic("Matcher.Named: unknown name: " + name)
+		err = fmt.Errorf("Matcher.Named: unknown name: " + name)
+		return
 	}
 	return
 }
@@ -435,21 +438,33 @@ func (m *Matcher) name2index(name string) (group int) {
 // Returns the value of the named capture group.  This is a nil slice
 // if the capture group is not present.  Panics if the name does not
 // refer to a group.
-func (m *Matcher) Named(group string) []byte {
-	return m.Group(m.name2index(group))
+func (m *Matcher) Named(group string) (g []byte, err error) {
+	group_num, err := m.name2index(group)
+	if err != nil {
+		return
+	}
+	return m.Group(group_num), nil
 }
 
 // Returns the value of the named capture group, or an empty string if
 // the capture group is not present.  Panics if the name does not
 // refer to a group.
-func (m *Matcher) NamedString(group string) string {
-	return m.GroupString(m.name2index(group))
+func (m *Matcher) NamedString(group string) (g string, err error) {
+	group_num, err := m.name2index(group)
+	if err != nil {
+		return
+	}
+	return m.GroupString(group_num), nil
 }
 
 // Returns true if the named capture group is present.  Panics if the
 // name does not refer to a group.
-func (m *Matcher) NamedPresent(group string) bool {
-	return m.Present(m.name2index(group))
+func (m *Matcher) NamedPresent(group string) (pres bool) {
+	group_num, err := m.name2index(group)
+	if err != nil {
+		return false
+	}
+	return m.Present(group_num)
 }
 
 // Return the start and end of the first match, or nil if no match.

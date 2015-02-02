@@ -138,6 +138,40 @@ func TestMatcher(t *testing.T) {
 	check(`^(.*)$`, "a\000c", "a\000c", "a\000c")
 }
 
+func TestPartial(t *testing.T) {
+	re := MustCompile(`^abc`, 0)
+
+	// Check we get a partial match when we should
+	m := re.MatcherString("ab", PARTIAL_SOFT)
+	if !m.Matches() {
+		t.Error("Failed to find any matches")
+	} else if !m.Partial() {
+		t.Error("The match was not partial")
+	}
+
+	// Check we get an exact match when we should
+	m = re.MatcherString("abc", PARTIAL_SOFT)
+	if !m.Matches() {
+		t.Error("Failed to find any matches")
+	} else if m.Partial() {
+		t.Error("Match was partial but should have been exact")
+	}
+
+	m = re.Matcher([]byte("ab"), PARTIAL_SOFT)
+	if !m.Matches() {
+		t.Error("Failed to find any matches")
+	} else if !m.Partial() {
+		t.Error("The match was not partial")
+	}
+
+	m = re.Matcher([]byte("abc"), PARTIAL_SOFT)
+	if !m.Matches() {
+		t.Error("Failed to find any matches")
+	} else if m.Partial() {
+		t.Error("The match was net partial")
+	}
+}
+
 func TestCaseless(t *testing.T) {
 	m := MustCompile("abc", CASELESS).MatcherString("Abc", 0)
 	if !m.Matches() {

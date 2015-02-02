@@ -99,6 +99,27 @@ const (
 	PARTIAL_SOFT      = C.PCRE_PARTIAL_SOFT
 )
 
+// Exec-time and get/set-time error codes
+const (
+	ERROR_NO_MATCH        = C.PCRE_ERROR_NOMATCH
+	ERROR_NULL            = C.PCRE_ERROR_NULL
+	ERROR_BADOPTION       = C.PCRE_ERROR_BADOPTION
+	ERROR_BADMAGIC        = C.PCRE_ERROR_BADMAGIC
+	ERROR_UNKNOWN_OPCODE  = C.PCRE_ERROR_UNKNOWN_OPCODE
+	ERROR_UNKNOWN_NODE    = C.PCRE_ERROR_UNKNOWN_NODE
+	ERROR_NOMEMORY        = C.PCRE_ERROR_NOMEMORY
+	ERROR_NOSUBSTRING     = C.PCRE_ERROR_NOSUBSTRING
+	ERROR_MATCHLIMIT      = C.PCRE_ERROR_MATCHLIMIT
+	ERROR_CALLOUT         = C.PCRE_ERROR_CALLOUT
+	ERROR_BADUTF8         = C.PCRE_ERROR_BADUTF8
+	ERROR_BADUTF16        = C.PCRE_ERROR_BADUTF16
+	ERROR_BADUTF32        = C.PCRE_ERROR_BADUTF32
+	ERROR_BADUTF8_OFFSET  = C.PCRE_ERROR_BADUTF8_OFFSET
+	ERROR_BADUTF16_OFFSET = C.PCRE_ERROR_BADUTF16_OFFSET
+	ERROR_PARTIAL         = C.PCRE_ERROR_PARTIAL
+	ERROR_BADPARTIAL      = C.PCRE_ERROR_BADPARTIAL
+)
+
 // A reference to a compiled regular expression.
 // Use Compile or MustCompile to create such objects.
 type Regexp struct {
@@ -179,6 +200,7 @@ type Matcher struct {
 	groups   int
 	ovector  []C.int // scratch space for capture offsets
 	matches  bool    // last match was successful
+	partial  bool    // was the last match a partial match?
 	subjects string  // one of these fields is set to record the subject,
 	subjectb []byte  // so that Group/GroupString can return slices
 }
@@ -237,6 +259,24 @@ var nullbyte = []byte{0}
 // Tries to match the speficied byte array slice to the current
 // pattern.  Returns true if the match succeeds.
 func (m *Matcher) Match(subject []byte, flags int) bool {
+	rc := m.Exec(subject, flags)
+	m.matches = matched(rc)
+	m.partial = (rc == C.PCRE_ERROR_PARTIAL)
+	return m.matches
+}
+
+// Tries to match the speficied subject string to the current pattern.
+// Returns true if the match succeeds.
+func (m *Matcher) MatchString(subject string, flags int) bool {
+	rc := m.ExecString(subject, flags)
+	m.matches = matched(rc)
+	m.partial = (rc == ERROR_PARTIAL)
+	return m.matches
+}
+
+// Tries to match the speficied byte array slice to the current
+// pattern.  Returns exec result.
+func (m *Matcher) Exec(subject []byte, flags int) int {
 	if m.re.ptr == nil {
 		panic("Matcher.Match: uninitialized")
 	}
@@ -247,12 +287,12 @@ func (m *Matcher) Match(subject []byte, flags int) bool {
 		subject = nullbyte // make first character adressable
 	}
 	subjectptr := (*C.char)(unsafe.Pointer(&subject[0]))
-	return m.match(subjectptr, length, flags)
+	return m.exec(subjectptr, length, flags)
 }
 
 // Tries to match the speficied subject string to the current pattern.
-// Returns true if the match succeeds.
-func (m *Matcher) MatchString(subject string, flags int) bool {
+// Returns exec result.
+func (m *Matcher) ExecString(subject string, flags int) int {
 	if m.re.ptr == nil {
 		panic("Matcher.Match: uninitialized")
 	}
@@ -264,19 +304,21 @@ func (m *Matcher) MatchString(subject string, flags int) bool {
 	}
 	// The following is a non-portable kludge to avoid a copy
 	subjectptr := *(**C.char)(unsafe.Pointer(&subject))
-	return m.match(subjectptr, length, flags)
+	return m.exec(subjectptr, length, flags)
 }
 
-func (m *Matcher) match(subjectptr *C.char, length, flags int) bool {
+func (m *Matcher) exec(subjectptr *C.char, length, flags int) int {
 	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&m.re.ptr[0])), nil,
 		subjectptr, C.int(length),
 		0, C.int(flags), &m.ovector[0], C.int(len(m.ovector)))
+	return int(rc)
+}
+
+func matched(rc int) bool {
 	switch {
-	case rc >= 0:
-		m.matches = true
+	case rc >= 0 || rc == C.PCRE_ERROR_PARTIAL:
 		return true
 	case rc == C.PCRE_ERROR_NOMATCH:
-		m.matches = false
 		return false
 	case rc == C.PCRE_ERROR_BADOPTION:
 		panic("PCRE.Match: invalid option flag")
@@ -289,6 +331,13 @@ func (m *Matcher) match(subjectptr *C.char, length, flags int) bool {
 // ResetString, Match or MatchString succeeded.
 func (m *Matcher) Matches() bool {
 	return m.matches
+}
+
+// Returns true if a previous call to Matcher, MatcherString, Reset,
+// ResetString, Match or MatchString found a partial match.  Not really
+// an ideal interface but good enough for our current needs.
+func (m *Matcher) Partial() bool {
+	return m.partial
 }
 
 // Returns the number of groups in the current pattern.

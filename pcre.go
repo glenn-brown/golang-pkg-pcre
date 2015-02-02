@@ -396,7 +396,7 @@ func (m *Matcher) NamedPresent(group string) bool {
 // loc[0] is the start and loc[1] is the end.
 func (re *Regexp) FindIndex(bytes []byte, flags int) []int {
 	m := re.Matcher(bytes, flags)
-	if m.Match(bytes, flags) {
+	if m.Matches() {
 		return []int{int(m.ovector[0]), int(m.ovector[1])}
 	}
 	return nil

@@ -425,3 +425,7 @@ type CompileError struct {
 func (e *CompileError) String() string {
 	return e.Pattern + " (" + strconv.Itoa(e.Offset) + "): " + e.Message
 }
+
+func (e *CompileError) Error() string {
+	return e.String()
+}

@@ -488,6 +488,17 @@ func (re *Regexp) FindIndex(bytes []byte, flags int) []int {
 	return nil
 }
 
+// Return the start and end of the first match.
+func (re *Regexp) FindAllIndex(bytes []byte, flags int) (r [][]int) {
+	m := re.Matcher(bytes, flags)
+	offset := 0
+	for m.Match(bytes[offset:], flags) {
+		r = append(r, []int{offset + int(m.ovector[0]), offset + int(m.ovector[1])})
+		offset += int(m.ovector[1])
+	}
+	return
+}
+
 // Return a copy of a byte slice with pattern matches replaced by repl.
 func (re Regexp) ReplaceAll(bytes, repl []byte, flags int) []byte {
 	m := re.Matcher(bytes, 0)

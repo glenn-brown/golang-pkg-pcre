@@ -1,5 +1,6 @@
 golang-pkg-pcre
 ===============
+[![Build Status](https://travis-ci.org/misakwa/golang-pkg-pcre.svg)](https://travis-ci.org/misakwa/golang-pkg-pcre)
 
 This is a Go language package providing Perl-Compatible RegularExpression
 support using libpcre++.  Install the package with the current Debian

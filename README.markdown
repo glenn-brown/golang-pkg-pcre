@@ -27,4 +27,4 @@ import (
 
 ## LICENSE
 
-This is a fork of [golang-pkg-pcre](https://github.com/mathpl/golang-pkg-pcre).
+This is a fork of [go-pcre](https://github.com/pantsing/go-pcre).

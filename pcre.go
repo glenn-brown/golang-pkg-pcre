@@ -117,15 +117,27 @@ const (
 	ERROR_BADPARTIAL     = C.PCRE_ERROR_BADPARTIAL
 )
 
+// Flags for Study function
+const (
+	PCRE_STUDY_JIT_COMPILE              = C.PCRE_STUDY_JIT_COMPILE
+	PCRE_STUDY_JIT_PARTIAL_SOFT_COMPILE = C.PCRE_STUDY_JIT_PARTIAL_SOFT_COMPILE
+	PCRE_STUDY_JIT_PARTIAL_HARD_COMPILE = C.PCRE_STUDY_JIT_PARTIAL_HARD_COMPILE
+)
+
 // A reference to a compiled regular expression.
 // Use Compile or MustCompile to create such objects.
 type Regexp struct {
-	ptr []byte
+	ptr   []byte
+	extra []byte
 }
 
 // Number of bytes in the compiled pattern
 func pcresize(ptr *C.pcre) (size C.size_t) {
 	C.pcre_fullinfo(ptr, nil, C.PCRE_INFO_SIZE, unsafe.Pointer(&size))
+	return
+}
+func pcreJITsize(ptr *C.pcre, ext *C.pcre_extra) (size C.size_t) {
+	C.pcre_fullinfo(ptr, ext, C.PCRE_INFO_JITSIZE, unsafe.Pointer(&size))
 	return
 }
 
@@ -136,40 +148,71 @@ func pcregroups(ptr *C.pcre) (count C.int) {
 	return
 }
 
-// Move pattern to the Go heap so that we do not have to use a
-// finalizer.  PCRE patterns are fully relocatable. (We do not use
-// custom character tables.)
-func toheap(ptr *C.pcre) (re Regexp) {
-	defer C.free(unsafe.Pointer(ptr))
-	size := pcresize(ptr)
-	re.ptr = make([]byte, size)
-	C.memcpy(unsafe.Pointer(&re.ptr[0]), unsafe.Pointer(ptr), size)
-	return
-}
-
 // Try to compile the pattern.  If an error occurs, the second return
 // value is non-nil.
-func Compile(pattern string, flags int) (Regexp, *CompileError) {
+func Compile(pattern string, flags int) (Regexp, error) {
 	pattern1 := C.CString(pattern)
 	defer C.free(unsafe.Pointer(pattern1))
 	if clen := int(C.strlen(pattern1)); clen != len(pattern) {
-		return Regexp{}, &CompileError{
-			Pattern: pattern,
-			Message: "NUL byte in pattern",
-			Offset:  clen,
-		}
+		return Regexp{}, fmt.Errorf("%s (%d): %s",
+			pattern,
+			clen,
+			"NUL byte in pattern",
+		)
 	}
 	var errptr *C.char
 	var erroffset C.int
 	ptr := C.pcre_compile(pattern1, C.int(flags), &errptr, &erroffset, nil)
 	if ptr == nil {
-		return Regexp{}, &CompileError{
-			Pattern: pattern,
-			Message: C.GoString(errptr),
-			Offset:  int(erroffset),
-		}
+		return Regexp{}, fmt.Errorf("%s (%d): %s",
+			pattern,
+			int(erroffset),
+			C.GoString(errptr),
+		)
 	}
-	return toheap(ptr), nil
+	defer C.free(unsafe.Pointer(ptr))
+	psize := pcresize(ptr)
+	var re Regexp
+	re.ptr = make([]byte, psize)
+	C.memcpy(unsafe.Pointer(&re.ptr[0]), unsafe.Pointer(ptr), psize)
+	return re, nil
+}
+
+// Compile pattern with jit compilation
+func CompileJIT(ptr string, flags int) (Regexp, error) {
+	re, errC := Compile(ptr, flags)
+	if errC != nil {
+		return Regexp{}, errC
+	}
+	errS := re.Study(C.PCRE_STUDY_JIT_COMPILE)
+	if errS != nil {
+		return re, errS
+	}
+	return re, nil
+}
+
+// Try to study regexp to speed it up. If an error occurs, return
+// value is non-nil
+// Can be fast if flags = 0, if some if JIT falgs is sended, studying
+// can be quite a heavy optimization
+func (re *Regexp) Study(flags int) error {
+	var err *C.char
+	if flags == 0 {
+		return nil
+	}
+	extra := C.pcre_study((*C.pcre)(unsafe.Pointer(&re.ptr[0])), C.int(flags), &err)
+	if err != nil {
+		return fmt.Errorf(C.GoString(err))
+	}
+	defer C.free(unsafe.Pointer(extra))
+	size := pcreJITsize((*C.pcre)(unsafe.Pointer(&re.ptr[0])), extra)
+	if size > 0 {
+		re.extra = make([]byte, size)
+		C.memcpy(unsafe.Pointer(&re.extra[0]), unsafe.Pointer(extra), size)
+		return nil
+	} else {
+		return fmt.Errorf(C.GoString(err))
+	}
 }
 
 // Compile the pattern.  If compilation fails, panic.
@@ -305,7 +348,13 @@ func (m *Matcher) ExecString(subject string, flags int) int {
 }
 
 func (m *Matcher) exec(subjectptr *C.char, length, flags int) int {
-	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&m.re.ptr[0])), nil,
+	var extra *C.pcre_extra
+	if m.re.extra != nil {
+		extra = (*C.pcre_extra)(unsafe.Pointer(&m.re.extra[0]))
+	} else {
+		extra = nil
+	}
+	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&m.re.ptr[0])), extra,
 		subjectptr, C.int(length),
 		0, C.int(flags), &m.ovector[0], C.int(len(m.ovector)))
 	return int(rc)
@@ -385,12 +434,10 @@ func (m *Matcher) ExtractString() []string {
 	if m.matches {
 		captured_texts := make([]string, m.groups+1)
 		captured_texts[0] = m.subjects
-		//fmt.Printf("capture(%d): %v\n", len(m.subjectb), m.subjects)
 		for i := 1; i < m.groups+1; i++ {
 			start := m.ovector[2*i]
 			end := m.ovector[2*i+1]
 
-			// fmt.Printf("start: %v, end: %v\n", start, end)
 			captured_text := m.subjects[start:end]
 			captured_texts[i] = captured_text
 		}
@@ -507,21 +554,4 @@ func (re Regexp) ReplaceAll(bytes, repl []byte, flags int) []byte {
 		bytes = bytes[m.ovector[1]:]
 	}
 	return append(r, bytes...)
-}
-
-// A compilation error, as returned by the Compile function.  The
-// offset is the byte position in the pattern string at which the
-// error was detected.
-type CompileError struct {
-	Pattern string
-	Message string
-	Offset  int
-}
-
-func (e *CompileError) String() string {
-	return e.Pattern + " (" + strconv.Itoa(e.Offset) + "): " + e.Message
-}
-
-func (e *CompileError) Error() string {
-	return e.String()
 }

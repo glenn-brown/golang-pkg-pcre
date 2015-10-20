@@ -5,11 +5,11 @@
 // met:
 //
 // * Redistributions of source code must retain the above copyright
-//   notice, this list of conditions and the following disclaimer.
+// notice, this list of conditions and the following disclaimer.
 //
 // * Redistributions in binary form must reproduce the above copyright
-//   notice, this list of conditions and the following disclaimer in the
-//   documentation and/or other materials provided with the distribution.
+// notice, this list of conditions and the following disclaimer in the
+// documentation and/or other materials provided with the distribution.
 //
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
 // "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
@@ -26,24 +26,33 @@
 // This package provides access to the Perl Compatible Regular
 // Expresion library, PCRE.
 //
-// It implements two main types, Regexp and Matcher.  Regexp objects
-// store a compiled regular expression.  They are immutable.
+// It implements two main types, Regexp and Matcher. Regexp objects
+// store a compiled regular expression. They consist of two immutable
+// parts: pcre and pcre_extra. You can add pcre_exta to Compiled Regexp by
+// studying it with Study() function.
 // Compilation of regular expressions using Compile or MustCompile is
 // slightly expensive, so these objects should be kept and reused,
 // instead of compiling them from scratch for each matching attempt.
+// CompileJIT and MustCompileJIT are way more expensive then ordinary
+// methods, becose they run Study() func after Regexp compiled but gives
+// much better perfomance:
+// http://sljit.sourceforge.net/regex_perf.html
 //
 // Matcher objects keeps the results of a match against a []byte or
-// string subject.  The Group and GroupString functions provide access
+// string subject. The Group and GroupString functions provide access
 // to capture groups; both versions work no matter if the subject was a
-// []byte or string, but the version with the matching type is slightly
-// more efficient.
+// []byte or string.
 //
 // Matcher objects contain some temporary space and refer the original
-// subject.  They are mutable and can be reused (using Match,
+// subject. They are mutable and can be reused (using Match,
 // MatchString, Reset or ResetString).
+//
+// Most of Matcher.*String method are just links to []byte methods, so keep
+// this in mind.
 //
 // For details on the regular expression language implemented by this
 // package and the flags defined below, see the PCRE documentation.
+// http://www.pcre.org/pcre.txt
 package pcre
 
 /*
@@ -99,6 +108,13 @@ const (
 	PARTIAL_SOFT      = C.PCRE_PARTIAL_SOFT
 )
 
+// Flags for Study function
+const (
+	STUDY_JIT_COMPILE              = C.PCRE_STUDY_JIT_COMPILE
+	STUDY_JIT_PARTIAL_SOFT_COMPILE = C.PCRE_STUDY_JIT_PARTIAL_SOFT_COMPILE
+	STUDY_JIT_PARTIAL_HARD_COMPILE = C.PCRE_STUDY_JIT_PARTIAL_HARD_COMPILE
+)
+
 // Exec-time and get/set-time error codes
 const (
 	ERROR_NO_MATCH       = C.PCRE_ERROR_NOMATCH
@@ -115,13 +131,6 @@ const (
 	ERROR_BADUTF8_OFFSET = C.PCRE_ERROR_BADUTF8_OFFSET
 	ERROR_PARTIAL        = C.PCRE_ERROR_PARTIAL
 	ERROR_BADPARTIAL     = C.PCRE_ERROR_BADPARTIAL
-)
-
-// Flags for Study function
-const (
-	PCRE_STUDY_JIT_COMPILE              = C.PCRE_STUDY_JIT_COMPILE
-	PCRE_STUDY_JIT_PARTIAL_SOFT_COMPILE = C.PCRE_STUDY_JIT_PARTIAL_SOFT_COMPILE
-	PCRE_STUDY_JIT_PARTIAL_HARD_COMPILE = C.PCRE_STUDY_JIT_PARTIAL_HARD_COMPILE
 )
 
 // A reference to a compiled regular expression.
@@ -148,7 +157,7 @@ func pcregroups(ptr *C.pcre) (count C.int) {
 	return
 }
 
-// Try to compile the pattern.  If an error occurs, the second return
+// Try to compile the pattern. If an error occurs, the second return
 // value is non-nil.
 func Compile(pattern string, flags int) (Regexp, error) {
 	pattern1 := C.CString(pattern)
@@ -191,31 +200,7 @@ func CompileJIT(ptr string, flags int) (Regexp, error) {
 	return re, nil
 }
 
-// Try to study regexp to speed it up. If an error occurs, return
-// value is non-nil
-// Can be fast if flags = 0, if some if JIT falgs is sended, studying
-// can be quite a heavy optimization
-func (re *Regexp) Study(flags int) error {
-	var err *C.char
-	if flags == 0 {
-		return nil
-	}
-	extra := C.pcre_study((*C.pcre)(unsafe.Pointer(&re.ptr[0])), C.int(flags), &err)
-	if err != nil {
-		return fmt.Errorf(C.GoString(err))
-	}
-	defer C.free(unsafe.Pointer(extra))
-	size := pcreJITsize((*C.pcre)(unsafe.Pointer(&re.ptr[0])), extra)
-	if size > 0 {
-		re.extra = make([]byte, size)
-		C.memcpy(unsafe.Pointer(&re.extra[0]), unsafe.Pointer(extra), size)
-		return nil
-	} else {
-		return fmt.Errorf(C.GoString(err))
-	}
-}
-
-// Compile the pattern.  If compilation fails, panic.
+// Compile the pattern. If compilation fails, panic.
 func MustCompile(pattern string, flags int) (re Regexp) {
 	re, err := Compile(pattern, flags)
 	if err != nil {
@@ -224,7 +209,37 @@ func MustCompile(pattern string, flags int) (re Regexp) {
 	return
 }
 
-// Returns the number of capture groups in the compiled pattern.
+// CompileJIT the pattern. If compilation fails, panic.
+func MustCompileJIT(pattern string, flags int) (re Regexp) {
+	re, err := CompileJIT(pattern, flags)
+	if err != nil {
+		panic(err)
+	}
+	return
+}
+
+// Return the start and end of the first match.
+func (re *Regexp) FindAllIndex(bytes []byte, flags int) (r [][]int) {
+	m := re.Matcher(bytes, flags)
+	offset := 0
+	for m.Match(bytes[offset:], flags) {
+		r = append(r, []int{offset + int(m.ovector[0]), offset + int(m.ovector[1])})
+		offset += int(m.ovector[1])
+	}
+	return
+}
+
+// Return the start and end of the first match, or nil if no match.
+// loc[0] is the start and loc[1] is the end.
+func (re *Regexp) FindIndex(bytes []byte, flags int) []int {
+	m := re.Matcher(bytes, flags)
+	if m.Matches {
+		return []int{int(m.ovector[0]), int(m.ovector[1])}
+	}
+	return nil
+}
+
+// Returns the number of capture groups in the compiled regexp pattern.
 func (re Regexp) Groups() int {
 	if re.ptr == nil {
 		panic("Regexp.Groups: uninitialized")
@@ -232,17 +247,17 @@ func (re Regexp) Groups() int {
 	return int(pcregroups((*C.pcre)(unsafe.Pointer(&re.ptr[0]))))
 }
 
-// Matcher objects provide a place for storing match results.
-// They can be created by the Matcher and MatcherString functions,
-// or they can be initialized with Reset or ResetString.
-type Matcher struct {
-	re       Regexp
-	groups   int
-	ovector  []C.int // scratch space for capture offsets
-	matches  bool    // last match was successful
-	partial  bool    // was the last match a partial match?
-	subjects string  // one of these fields is set to record the subject,
-	subjectb []byte  // so that Group/GroupString can return slices
+// Tries to match the speficied byte array slice to the current pattern.
+// Returns true if the match succeeds.
+func (r *Regexp) Match(subject []byte, flags int) bool {
+	m := r.Matcher(subject, flags)
+	return m.Matches
+}
+
+// Same as Match, but accept string as argument
+func (r *Regexp) MatchString(subject string, flags int) bool {
+	m := r.Matcher([]byte(subject), flags)
+	return m.Matches
 }
 
 // Returns a new matcher object, with the byte array slice as a
@@ -258,6 +273,288 @@ func (re Regexp) MatcherString(subject string, flags int) (m *Matcher) {
 	m = new(Matcher)
 	m.ResetString(re, subject, flags)
 	return
+}
+
+// Return a copy of a byte slice with pattern matches replaced by repl.
+func (re Regexp) ReplaceAll(bytes, repl []byte, flags int) []byte {
+	m := re.Matcher(bytes, 0)
+	r := []byte{}
+	for m.Match(bytes, flags) {
+		r = append(append(r, bytes[:m.ovector[0]]...), repl...)
+		bytes = bytes[m.ovector[1]:]
+	}
+	return append(r, bytes...)
+}
+
+// Same as ReplaceAll, but accept strings as arguments
+func (re Regexp) ReplaceAllString(src, repl string, flags int) string {
+	return string(re.ReplaceAll([]byte(src), []byte(repl), flags))
+}
+
+// Study regexp and add pcre_extra information to it, which gives huge
+// speed boost when matching. If an error occurs, return value is
+// non-nil. If flags = 0, don't study at all and return error.
+// Studying can be quite a heavy optimization, but it's worth it.
+func (re *Regexp) Study(flags int) error {
+	if re.extra != nil {
+		return fmt.Errorf("Regexp already optimized")
+	}
+	if flags == 0 {
+		return fmt.Errorf("flag must be > 0")
+	}
+	var err *C.char
+	extra := C.pcre_study((*C.pcre)(unsafe.Pointer(&re.ptr[0])), C.int(flags), &err)
+	if err != nil {
+		return fmt.Errorf(C.GoString(err))
+	}
+	defer C.free(unsafe.Pointer(extra))
+	size := pcreJITsize((*C.pcre)(unsafe.Pointer(&re.ptr[0])), extra)
+	if size > 0 {
+		re.extra = make([]byte, size)
+		C.memcpy(unsafe.Pointer(&re.extra[0]), unsafe.Pointer(extra), size)
+		return nil
+	} else {
+		return fmt.Errorf(C.GoString(err))
+	}
+}
+
+// Matcher objects provide a place for storing match results.
+// They can be created by the Matcher and MatcherString functions,
+// or they can be initialized with Reset or ResetString.
+type Matcher struct {
+	re       Regexp
+	Groups   int
+	ovector  []int32 // space for capture offsets, int32 is analogfor C.int type
+	Matches  bool    // last match was successful
+	Partial  bool    // was the last match a partial match?
+	SubjectS string  // contain finded subject as string
+	SubjectB []byte  // contain finded subject as []byte
+}
+
+// Tries to match the speficied byte array slice to the current
+// pattern. Returns exec result.
+// C docs http://www.pcre.org/original/doc/html/pcre_exec.html
+func (m *Matcher) Exec(subject []byte, flags int) int {
+	if m.re.ptr == nil {
+		panic("Matcher.Match: uninitialized")
+	}
+	length := len(subject)
+	m.SubjectS = string(subject)
+	m.SubjectB = subject
+	if length == 0 {
+		subject = nullbyte // make first character adressable
+	}
+	subjectptr := (*C.char)(unsafe.Pointer(&subject[0]))
+	return m.exec(subjectptr, length, flags)
+}
+
+// Same as Exec, but accept string as argument
+func (m *Matcher) ExecString(subject string, flags int) int {
+	return m.Exec([]byte(subject), flags)
+}
+
+func (m *Matcher) exec(subjectptr *C.char, length, flags int) int {
+	var extra *C.pcre_extra
+	if m.re.extra != nil {
+		extra = (*C.pcre_extra)(unsafe.Pointer(&m.re.extra[0]))
+	} else {
+		extra = nil
+	}
+	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&m.re.ptr[0])), extra,
+		subjectptr, C.int(length), 0, C.int(flags),
+		(*C.int)(unsafe.Pointer(&m.ovector[0])), C.int(len(m.ovector)))
+	return int(rc)
+}
+
+// Returns the captured string with submatches of the last match
+// (performed by Matcher, MatcherString, Reset, ResetString, Match,
+// or MatchString). Group 0 is the part of the subject which matches
+// the whole pattern; the first actual capture group is numbered 1.
+// Capture groups which are not present return a nil slice.
+func (m *Matcher) Extract() [][]byte {
+	if m.Matches {
+		captured_texts := make([][]byte, m.Groups+1)
+		captured_texts[0] = m.SubjectB
+		for i := 1; i < m.Groups+1; i++ {
+			start := m.ovector[2*i]
+			end := m.ovector[2*i+1]
+			captured_text := m.SubjectB[start:end]
+			captured_texts[i] = captured_text
+		}
+		return captured_texts
+	} else {
+		return nil
+	}
+}
+
+// Same as Extract, but returns []string
+func (m *Matcher) ExtractString() []string {
+	if m.Matches {
+		captured_texts := make([]string, m.Groups+1)
+		captured_texts[0] = m.SubjectS
+		for i := 1; i < m.Groups+1; i++ {
+			start := m.ovector[2*i]
+			end := m.ovector[2*i+1]
+			captured_text := m.SubjectS[start:end]
+			captured_texts[i] = captured_text
+		}
+		return captured_texts
+	} else {
+		return nil
+	}
+}
+
+func (m *Matcher) init(re Regexp) {
+	m.Matches = false
+	if m.re.ptr != nil && &m.re.ptr[0] == &re.ptr[0] {
+		// Skip group count extraction if the matcher has
+		// already been initialized with the same regular
+		// expression.
+		return
+	}
+	m.re = re
+	m.Groups = re.Groups()
+	if ovectorlen := 3 * (1 + m.Groups); len(m.ovector) < ovectorlen {
+		m.ovector = make([]int32, int32(ovectorlen))
+	}
+}
+
+var nullbyte = []byte{0}
+
+// Returns the numbered capture group of the last match (performed by
+// Matcher, MatcherString, Reset, ResetString, Match, or MatchString).
+// Group 0 is the part of the subject which matches the whole pattern;
+// the first actual capture group is numbered 1. Capture groups which
+// are not present return a nil slice.
+func (m *Matcher) Group(group int) []byte {
+	start := m.ovector[2*group]
+	end := m.ovector[2*group+1]
+	if start >= 0 {
+		return m.SubjectB[start:end]
+	}
+	return nil
+}
+
+// Returns the numbered capture group positions of the last match
+// (performed by Matcher, MatcherString, Reset, ResetString, Match,
+// or MatchString). Group 0 is the part of the subject which matches
+// the whole pattern; the first actual capture group is numbered 1.
+// Capture groups which are not present return a nil slice.
+func (m *Matcher) GroupIndices(group int) []int {
+	start := m.ovector[2*group]
+	end := m.ovector[2*group+1]
+	if start >= 0 {
+		return []int{int(start), int(end)}
+	}
+	return nil
+}
+
+// Same as Group, but returns string
+func (m *Matcher) GroupString(group int) string {
+	start := m.ovector[2*group]
+	end := m.ovector[2*group+1]
+	if start >= 0 {
+		return m.SubjectS[start:end]
+	}
+	return ""
+}
+
+// Index returns the start and end of the first match, if a previous
+// call to Matcher, MatcherString, Reset, ResetString, Match or
+// MatchString succeeded. loc[0] is the start and loc[1] is the end.
+func (m *Matcher) Index() []int {
+	if !m.Matches {
+		return nil
+	}
+
+	return []int{int(m.ovector[0]), int(m.ovector[1])}
+}
+
+// Tries to match the speficied byte array slice to the current
+// pattern. Returns true if the match succeeds.
+func (m *Matcher) Match(subject []byte, flags int) bool {
+	rc := m.Exec(subject, flags)
+	m.Matches = checkMatch(rc)
+	m.Partial = (rc == C.PCRE_ERROR_PARTIAL)
+	return m.Matches
+}
+
+// Tries to match the speficied subject string to the current pattern.
+// Returns true if the match succeeds.
+func (m *Matcher) MatchString(subject string, flags int) bool {
+	rc := m.ExecString(subject, flags)
+	m.Matches = checkMatch(rc)
+	m.Partial = (rc == ERROR_PARTIAL)
+	return m.Matches
+}
+
+func checkMatch(rc int) bool {
+	switch {
+	case rc >= 0 || rc == C.PCRE_ERROR_PARTIAL:
+		return true
+	case rc == C.PCRE_ERROR_NOMATCH:
+		return false
+	case rc == C.PCRE_ERROR_BADOPTION:
+		panic("PCRE.Match: invalid option flag")
+	}
+	panic("unexepected return code from pcre_exec: " +
+		strconv.Itoa(int(rc)))
+}
+
+func (m *Matcher) name2index(name string) (group int, err error) {
+	if m.re.ptr == nil {
+		err = fmt.Errorf("Matcher.Named: uninitialized")
+		return
+	}
+	name1 := C.CString(name)
+	defer C.free(unsafe.Pointer(name1))
+	group = int(C.pcre_get_stringnumber(
+		(*C.pcre)(unsafe.Pointer(&m.re.ptr[0])), name1))
+	if group < 0 {
+		err = fmt.Errorf("Matcher.Named: unknown name: " + name)
+		return
+	}
+	return
+}
+
+// Returns the value of the named capture group. This is a nil slice
+// if the capture group is not present. Panics if the name does not
+// refer to a group.
+func (m *Matcher) Named(group string) (g []byte, err error) {
+	group_num, err := m.name2index(group)
+	if err != nil {
+		return
+	}
+	return m.Group(group_num), nil
+}
+
+// Returns true if the named capture group is present. Panics if the
+// name does not refer to a group.
+func (m *Matcher) NamedPresent(group string) (pres bool) {
+	group_num, err := m.name2index(group)
+	if err != nil {
+		return false
+	}
+	return m.Present(group_num)
+}
+
+// Returns the value of the named capture group, or an empty string if
+// the capture group is not present. Panics if the name does not
+// refer to a group.
+func (m *Matcher) NamedString(group string) (g string, err error) {
+	group_num, err := m.name2index(group)
+	if err != nil {
+		return
+	}
+	return m.GroupString(group_num), nil
+}
+
+// Returns true if the numbered capture group is present in the last
+// match (performed by Matcher, MatcherString, Reset, ResetString,
+// Match, or MatchString). Group numbers start at 1. A capture group
+// can be present and match the empty string.
+func (m *Matcher) Present(group int) bool {
+	return m.ovector[2*group] >= 0
 }
 
 // Switches the matcher object to the specified pattern and subject.
@@ -277,289 +574,4 @@ func (m *Matcher) ResetString(re Regexp, subject string, flags int) {
 	}
 	m.init(re)
 	m.MatchString(subject, flags)
-}
-
-func (m *Matcher) init(re Regexp) {
-	m.matches = false
-	if m.re.ptr != nil && &m.re.ptr[0] == &re.ptr[0] {
-		// Skip group count extraction if the matcher has
-		// already been initialized with the same regular
-		// expression.
-		return
-	}
-	m.re = re
-	m.groups = re.Groups()
-	if ovectorlen := 3 * (1 + m.groups); len(m.ovector) < ovectorlen {
-		m.ovector = make([]C.int, ovectorlen)
-	}
-}
-
-var nullbyte = []byte{0}
-
-// Tries to match the speficied byte array slice to the current
-// pattern.  Returns true if the match succeeds.
-func (m *Matcher) Match(subject []byte, flags int) bool {
-	rc := m.Exec(subject, flags)
-	m.matches = checkMatch(rc)
-	m.partial = (rc == C.PCRE_ERROR_PARTIAL)
-	return m.matches
-}
-func (r *Regexp) Match(subject []byte, flags int) bool {
-	m := r.Matcher(subject, flags)
-	return m.Matches()
-}
-
-// Tries to match the speficied subject string to the current pattern.
-// Returns true if the match succeeds.
-func (m *Matcher) MatchString(subject string, flags int) bool {
-	rc := m.ExecString(subject, flags)
-	m.matches = checkMatch(rc)
-	m.partial = (rc == ERROR_PARTIAL)
-	return m.matches
-}
-func (r *Regexp) MatchString(subject string, flags int) bool {
-	m := r.Matcher([]byte(subject), flags)
-	return m.Matches()
-}
-
-// Tries to match the speficied byte array slice to the current
-// pattern.  Returns exec result.
-func (m *Matcher) Exec(subject []byte, flags int) int {
-	if m.re.ptr == nil {
-		panic("Matcher.Match: uninitialized")
-	}
-	length := len(subject)
-	m.subjects = ""
-	m.subjectb = subject
-	if length == 0 {
-		subject = nullbyte // make first character adressable
-	}
-	subjectptr := (*C.char)(unsafe.Pointer(&subject[0]))
-	return m.exec(subjectptr, length, flags)
-}
-
-// Tries to match the speficied subject string to the current pattern.
-// Returns exec result.
-func (m *Matcher) ExecString(subject string, flags int) int {
-	if m.re.ptr == nil {
-		panic("Matcher.Match: uninitialized")
-	}
-	length := len(subject)
-	m.subjects = subject
-	m.subjectb = nil
-	if length == 0 {
-		subject = "\000" // make first character addressable
-	}
-	// The following is a non-portable kludge to avoid a copy
-	subjectptr := *(**C.char)(unsafe.Pointer(&subject))
-	return m.exec(subjectptr, length, flags)
-}
-
-func (m *Matcher) exec(subjectptr *C.char, length, flags int) int {
-	var extra *C.pcre_extra
-	if m.re.extra != nil {
-		extra = (*C.pcre_extra)(unsafe.Pointer(&m.re.extra[0]))
-	} else {
-		extra = nil
-	}
-	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&m.re.ptr[0])), extra,
-		subjectptr, C.int(length),
-		0, C.int(flags), &m.ovector[0], C.int(len(m.ovector)))
-	return int(rc)
-}
-
-func checkMatch(rc int) bool {
-	switch {
-	case rc >= 0 || rc == C.PCRE_ERROR_PARTIAL:
-		return true
-	case rc == C.PCRE_ERROR_NOMATCH:
-		return false
-	case rc == C.PCRE_ERROR_BADOPTION:
-		panic("PCRE.Match: invalid option flag")
-	}
-	panic("unexepected return code from pcre_exec: " +
-		strconv.Itoa(int(rc)))
-}
-
-// Returns true if a previous call to Matcher, MatcherString, Reset,
-// ResetString, Match or MatchString succeeded.
-func (m *Matcher) Matches() bool {
-	return m.matches
-}
-
-// Returns true if a previous call to Matcher, MatcherString, Reset,
-// ResetString, Match or MatchString found a partial match.  Not really
-// an ideal interface but good enough for our current needs.
-func (m *Matcher) Partial() bool {
-	return m.partial
-}
-
-// Returns the number of groups in the current pattern.
-func (m *Matcher) Groups() int {
-	return m.groups
-}
-
-// Returns true if the numbered capture group is present in the last
-// match (performed by Matcher, MatcherString, Reset, ResetString,
-// Match, or MatchString).  Group numbers start at 1.  A capture group
-// can be present and match the empty string.
-func (m *Matcher) Present(group int) bool {
-	return m.ovector[2*group] >= 0
-}
-
-// Returns the numbered capture group of the last match (performed by
-// Matcher, MatcherString, Reset, ResetString, Match, or MatchString).
-// Group 0 is the part of the subject which matches the whole pattern;
-// the first actual capture group is numbered 1.  Capture groups which
-// are not present return a nil slice.
-func (m *Matcher) Group(group int) []byte {
-	start := m.ovector[2*group]
-	end := m.ovector[2*group+1]
-	if start >= 0 {
-		if m.subjectb != nil {
-			return m.subjectb[start:end]
-		}
-		return []byte(m.subjects[start:end])
-	}
-	return nil
-}
-
-// Returns the numbered capture group positions of the last match
-// (performed by Matcher, MatcherString, Reset, ResetString, Match,
-// or MatchString). Group 0 is the part of the subject which matches
-// the whole pattern; the first actual capture group is numbered 1.
-// Capture groups which are not present return a nil slice.
-func (m *Matcher) GroupIndices(group int) []int {
-	start := m.ovector[2*group]
-	end := m.ovector[2*group+1]
-	if start >= 0 {
-		return []int{int(start), int(end)}
-	}
-	return nil
-}
-
-func (m *Matcher) ExtractString() []string {
-	if m.matches {
-		captured_texts := make([]string, m.groups+1)
-		captured_texts[0] = m.subjects
-		for i := 1; i < m.groups+1; i++ {
-			start := m.ovector[2*i]
-			end := m.ovector[2*i+1]
-
-			captured_text := m.subjects[start:end]
-			captured_texts[i] = captured_text
-		}
-
-		return captured_texts
-	} else {
-		return nil
-	}
-
-}
-
-// Returns the numbered capture group as a string.  Group 0 is the
-// part of the subject which matches the whole pattern; the first
-// actual capture group is numbered 1.  Capture groups which are not
-// present return an empty string.
-func (m *Matcher) GroupString(group int) string {
-	start := m.ovector[2*group]
-	end := m.ovector[2*group+1]
-	if start >= 0 {
-		if m.subjectb != nil {
-			return string(m.subjectb[start:end])
-		}
-		return m.subjects[start:end]
-	}
-	return ""
-}
-
-// Index returns the start and end of the first match, if a previous
-// call to Matcher, MatcherString, Reset, ResetString, Match or
-// MatchString succeeded. loc[0] is the start and loc[1] is the end.
-func (m *Matcher) Index() []int {
-	if !m.Matches() {
-		return nil
-	}
-
-	return []int{int(m.ovector[0]), int(m.ovector[1])}
-}
-
-func (m *Matcher) name2index(name string) (group int, err error) {
-	if m.re.ptr == nil {
-		err = fmt.Errorf("Matcher.Named: uninitialized")
-		return
-	}
-	name1 := C.CString(name)
-	defer C.free(unsafe.Pointer(name1))
-	group = int(C.pcre_get_stringnumber(
-		(*C.pcre)(unsafe.Pointer(&m.re.ptr[0])), name1))
-	if group < 0 {
-		err = fmt.Errorf("Matcher.Named: unknown name: " + name)
-		return
-	}
-	return
-}
-
-// Returns the value of the named capture group.  This is a nil slice
-// if the capture group is not present.  Panics if the name does not
-// refer to a group.
-func (m *Matcher) Named(group string) (g []byte, err error) {
-	group_num, err := m.name2index(group)
-	if err != nil {
-		return
-	}
-	return m.Group(group_num), nil
-}
-
-// Returns the value of the named capture group, or an empty string if
-// the capture group is not present.  Panics if the name does not
-// refer to a group.
-func (m *Matcher) NamedString(group string) (g string, err error) {
-	group_num, err := m.name2index(group)
-	if err != nil {
-		return
-	}
-	return m.GroupString(group_num), nil
-}
-
-// Returns true if the named capture group is present.  Panics if the
-// name does not refer to a group.
-func (m *Matcher) NamedPresent(group string) (pres bool) {
-	group_num, err := m.name2index(group)
-	if err != nil {
-		return false
-	}
-	return m.Present(group_num)
-}
-
-// Return the start and end of the first match, or nil if no match.
-// loc[0] is the start and loc[1] is the end.
-func (re *Regexp) FindIndex(bytes []byte, flags int) []int {
-	m := re.Matcher(bytes, flags)
-	if m.Matches() {
-		return []int{int(m.ovector[0]), int(m.ovector[1])}
-	}
-	return nil
-}
-
-// Return the start and end of the first match.
-func (re *Regexp) FindAllIndex(bytes []byte, flags int) (r [][]int) {
-	m := re.Matcher(bytes, flags)
-	offset := 0
-	for m.Match(bytes[offset:], flags) {
-		r = append(r, []int{offset + int(m.ovector[0]), offset + int(m.ovector[1])})
-		offset += int(m.ovector[1])
-	}
-	return
-}
-
-// Return a copy of a byte slice with pattern matches replaced by repl.
-func (re Regexp) ReplaceAll(bytes, repl []byte, flags int) []byte {
-	m := re.Matcher(bytes, 0)
-	r := []byte{}
-	for m.Match(bytes, flags) {
-		r = append(append(r, bytes[:m.ovector[0]]...), repl...)
-		bytes = bytes[m.ovector[1]:]
-	}
-	return append(r, bytes...)
 }

@@ -300,18 +300,26 @@ var nullbyte = []byte{0}
 // pattern.  Returns true if the match succeeds.
 func (m *Matcher) Match(subject []byte, flags int) bool {
 	rc := m.Exec(subject, flags)
-	m.matches = matched(rc)
+	m.matches = checkMatch(rc)
 	m.partial = (rc == C.PCRE_ERROR_PARTIAL)
 	return m.matches
+}
+func (r *Regexp) Match(subject []byte, flags int) bool {
+	m := r.Matcher(subject, flags)
+	return m.Matches()
 }
 
 // Tries to match the speficied subject string to the current pattern.
 // Returns true if the match succeeds.
 func (m *Matcher) MatchString(subject string, flags int) bool {
 	rc := m.ExecString(subject, flags)
-	m.matches = matched(rc)
+	m.matches = checkMatch(rc)
 	m.partial = (rc == ERROR_PARTIAL)
 	return m.matches
+}
+func (r *Regexp) MatchString(subject string, flags int) bool {
+	m := r.Matcher([]byte(subject), flags)
+	return m.Matches()
 }
 
 // Tries to match the speficied byte array slice to the current
@@ -360,7 +368,7 @@ func (m *Matcher) exec(subjectptr *C.char, length, flags int) int {
 	return int(rc)
 }
 
-func matched(rc int) bool {
+func checkMatch(rc int) bool {
 	switch {
 	case rc >= 0 || rc == C.PCRE_ERROR_PARTIAL:
 		return true

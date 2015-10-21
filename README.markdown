@@ -1,17 +1,22 @@
-golang-pkg-pcre
+go-pcre
 ===============
 
 This is a Go language package providing Perl-Compatible RegularExpression
-support using libpcre++.
+support using libpcre or libpcre++.
+
+## documentation
+
+Use [godoc](https://godoc.org/github.com/GRbit/go-pcre).
 
 ## installation
 
-1. install libpcre++-dev
+1. install libpcre3-dev or libpcre++-dev
 
 2. go get
 
 ```bash
-go get github.com/kyoh86/go-pcre/
+sudo apt-get install libpcre3-dev
+go get github.com/GRbit/go-pcre/
 ```
 
 ## usage
@@ -21,7 +26,7 @@ follows to allow automatic downloading:
 
 ```go
 import (
-  "github.com/kyoh86/go-pcre/"
+  "github.com/GRbit/go-pcre/"
 )
 ```
 

@@ -117,7 +117,7 @@ const (
 
 // Exec-time and get/set-time error codes
 const (
-	ERROR_NO_MATCH       = C.PCRE_ERROR_NOMATCH
+	ERROR_NOMATCH        = C.PCRE_ERROR_NOMATCH
 	ERROR_NULL           = C.PCRE_ERROR_NULL
 	ERROR_BADOPTION      = C.PCRE_ERROR_BADOPTION
 	ERROR_BADMAGIC       = C.PCRE_ERROR_BADMAGIC
@@ -131,6 +131,10 @@ const (
 	ERROR_BADUTF8_OFFSET = C.PCRE_ERROR_BADUTF8_OFFSET
 	ERROR_PARTIAL        = C.PCRE_ERROR_PARTIAL
 	ERROR_BADPARTIAL     = C.PCRE_ERROR_BADPARTIAL
+	ERROR_RECURSIONLIMIT = C.PCRE_ERROR_RECURSIONLIMIT
+	ERROR_INTERNAL       = C.PCRE_ERROR_INTERNAL
+	ERROR_BADCOUNT       = C.PCRE_ERROR_BADCOUNT
+	ERROR_JIT_STACKLIMIT = C.PCRE_ERROR_JIT_STACKLIMIT
 )
 
 // A reference to a compiled regular expression.
@@ -474,7 +478,7 @@ func (m *Matcher) Index() []int {
 // pattern. Returns true if the match succeeds.
 func (m *Matcher) Match(subject []byte, flags int) bool {
 	rc := m.Exec(subject, flags)
-	m.Matches = checkMatch(rc)
+	m.Matches, _ = checkMatch(rc)
 	m.Partial = (rc == C.PCRE_ERROR_PARTIAL)
 	return m.Matches
 }
@@ -483,19 +487,39 @@ func (m *Matcher) Match(subject []byte, flags int) bool {
 // Returns true if the match succeeds.
 func (m *Matcher) MatchString(subject string, flags int) bool {
 	rc := m.ExecString(subject, flags)
-	m.Matches = checkMatch(rc)
+	m.Matches, _ = checkMatch(rc)
 	m.Partial = (rc == ERROR_PARTIAL)
 	return m.Matches
 }
 
-func checkMatch(rc int) bool {
+func checkMatch(rc int) (bool, error) {
 	switch {
-	case rc >= 0 || rc == C.PCRE_ERROR_PARTIAL:
-		return true
-	case rc == C.PCRE_ERROR_NOMATCH:
-		return false
-	case rc == C.PCRE_ERROR_BADOPTION:
-		panic("PCRE.Match: invalid option flag")
+	case rc >= 0 || rc == ERROR_PARTIAL:
+		return true, nil
+	case rc == ERROR_NOMATCH:
+		return false, nil
+	case rc == ERROR_NULL:
+		return false, fmt.Errorf("pcre_exec: one or more variables passed to pcre_exec == NULL")
+	case rc == ERROR_BADOPTION:
+		return false, fmt.Errorf("pcre_exec: An unrecognized bit was set in the options argument")
+	case rc == ERROR_BADMAGIC:
+		return false, fmt.Errorf("pcre_exec: invalid option flag")
+	case rc == ERROR_UNKNOWN_OPCODE:
+		return false, fmt.Errorf("pcre_exec: an unknown item was encountered in the compiled pattern")
+	case rc == ERROR_NOMEMORY:
+		return false, fmt.Errorf("pcre_exec: match limit")
+	case rc == ERROR_MATCHLIMIT:
+		return false, fmt.Errorf("pcre_exec: backtracking (match) limit was reached")
+	case rc == ERROR_BADUTF8:
+		return false, fmt.Errorf("pcre_exec: string that contains an invalid UTF-8 byte sequence was passed as a subject")
+	case rc == ERROR_RECURSIONLIMIT:
+		return false, fmt.Errorf("pcre_exec: recursion limit")
+	case rc == ERROR_JIT_STACKLIMIT:
+		return false, fmt.Errorf("pcre_exec: error JIT stack limit")
+	case rc == ERROR_INTERNAL:
+		panic("pcre_exec: INTERNAL ERROR")
+	case rc == ERROR_BADCOUNT:
+		panic("pcre_exec: INTERNAL ERROR")
 	}
 	panic("unexepected return code from pcre_exec: " +
 		strconv.Itoa(int(rc)))

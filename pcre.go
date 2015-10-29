@@ -115,6 +115,23 @@ const (
 	STUDY_JIT_PARTIAL_HARD_COMPILE = C.PCRE_STUDY_JIT_PARTIAL_HARD_COMPILE
 )
 
+// Flags for Config() fuction
+const (
+	CONFIG_JIT                    = C.PCRE_CONFIG_JIT
+	CONFIG_JITTARGET              = C.PCRE_CONFIG_JITTARGET
+	CONFIG_LINK_SIZE              = C.PCRE_CONFIG_LINK_SIZE
+	CONFIG_MATCH_LIMIT            = C.PCRE_CONFIG_MATCH_LIMIT
+	CONFIG_MATCH_LIMIT_RECURSION  = C.PCRE_CONFIG_MATCH_LIMIT_RECURSION
+	CONFIG_NEWLINE                = C.PCRE_CONFIG_NEWLINE
+	CONFIG_BSR                    = C.PCRE_CONFIG_BSR
+	CONFIG_POSIX_MALLOC_THRESHOLD = C.PCRE_CONFIG_POSIX_MALLOC_THRESHOLD
+	CONFIG_STACKRECURSE           = C.PCRE_CONFIG_STACKRECURSE
+	CONFIG_UTF16                  = C.PCRE_CONFIG_UTF16
+	CONFIG_UTF32                  = C.PCRE_CONFIG_UTF32
+	CONFIG_UTF8                   = C.PCRE_CONFIG_UTF8
+	CONFIG_UNICODE_PROPERTIES     = C.PCRE_CONFIG_UNICODE_PROPERTIES
+)
+
 // Exec-time and get/set-time error codes
 const (
 	ERROR_NOMATCH        = C.PCRE_ERROR_NOMATCH
@@ -136,6 +153,58 @@ const (
 	ERROR_BADCOUNT       = C.PCRE_ERROR_BADCOUNT
 	ERROR_JIT_STACKLIMIT = C.PCRE_ERROR_JIT_STACKLIMIT
 )
+
+// This function returns information about libpcre configuration.
+// Function passed flag f to C.pcre_config() func, and convert returned
+// vaule to string type.
+// http://www.pcre.org/original/doc/html/pcre_config.html
+func Config(f int) (r string) {
+	if f == C.PCRE_CONFIG_JITTARGET {
+		var jittarget *C.char
+		C.pcre_config(C.PCRE_CONFIG_JITTARGET, unsafe.Pointer(&jittarget))
+		r = C.GoString(jittarget)
+	} else {
+		var i C.int
+		C.pcre_config(C.PCRE_CONFIG_JIT, unsafe.Pointer(&i))
+		r = fmt.Sprint(int32(i))
+	}
+	return
+}
+
+// This function returns string, which contains  all information
+// you can access by pcre_config() function
+func ConfigAll() (ret string) {
+	var i C.int
+	C.pcre_config(C.PCRE_CONFIG_JIT, unsafe.Pointer(&i))
+	ret += fmt.Sprintf("jit: %d\n", int32(i))
+	var jittarget *C.char
+	C.pcre_config(C.PCRE_CONFIG_JITTARGET, unsafe.Pointer(&jittarget))
+	ret += fmt.Sprintf("jittarget: %s\n", C.GoString(jittarget))
+	C.pcre_config(C.PCRE_CONFIG_LINK_SIZE, unsafe.Pointer(&i))
+	ret += fmt.Sprintf("link_size: %d\n", int32(i))
+	C.pcre_config(C.PCRE_CONFIG_MATCH_LIMIT, unsafe.Pointer(&i))
+	ret += fmt.Sprintf("match_limit: %d\n", int32(i))
+	C.pcre_config(C.PCRE_CONFIG_MATCH_LIMIT_RECURSION, unsafe.Pointer(&i))
+	ret += fmt.Sprintf("match_limit_recursion: %d\n", int32(i))
+	C.pcre_config(C.PCRE_CONFIG_NEWLINE, unsafe.Pointer(&i))
+	ret += fmt.Sprintf("newline: %d\n", int32(i))
+	C.pcre_config(C.PCRE_CONFIG_BSR, unsafe.Pointer(&i))
+	ret += fmt.Sprintf("bsr: %d\n", int32(i))
+	C.pcre_config(C.PCRE_CONFIG_POSIX_MALLOC_THRESHOLD, unsafe.Pointer(&i))
+	ret += fmt.Sprintf("posix_malloc_threshold: %d\n", int32(i))
+	C.pcre_config(C.PCRE_CONFIG_STACKRECURSE, unsafe.Pointer(&i))
+	ret += fmt.Sprintf("stackrecurse: %d\n", int32(i))
+	C.pcre_config(C.PCRE_CONFIG_UTF16, unsafe.Pointer(&i))
+	ret += fmt.Sprintf("utf16: %d\n", int32(i))
+	C.pcre_config(C.PCRE_CONFIG_UTF32, unsafe.Pointer(&i))
+	ret += fmt.Sprintf("utf32: %d\n", int32(i))
+	C.pcre_config(C.PCRE_CONFIG_UTF8, unsafe.Pointer(&i))
+	ret += fmt.Sprintf("utf8: %d", int32(i))
+	C.pcre_config(C.PCRE_CONFIG_UNICODE_PROPERTIES, unsafe.Pointer(&i))
+	ret += fmt.Sprintf("unicode_properties: %d\n", int32(i))
+
+	return
+}
 
 // A reference to a compiled regular expression.
 // Use Compile or MustCompile to create such objects.

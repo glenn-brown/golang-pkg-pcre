@@ -195,11 +195,11 @@ func Compile(pattern string, flags int) (Regexp, error) {
 func CompileJIT(ptr string, flags int) (Regexp, error) {
 	re, errC := Compile(ptr, flags)
 	if errC != nil {
-		return Regexp{}, errC
+		return Regexp{}, fmt.Errorf("Compile error: %s", errC)
 	}
 	errS := re.Study(C.PCRE_STUDY_JIT_COMPILE)
 	if errS != nil {
-		return re, errS
+		return re, fmt.Errorf("Study error: %s", errS)
 	}
 	return re, nil
 }

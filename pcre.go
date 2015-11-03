@@ -165,7 +165,7 @@ func Config(f int) (r string) {
 		r = C.GoString(jittarget)
 	} else {
 		var i C.int
-		C.pcre_config(C.PCRE_CONFIG_JIT, unsafe.Pointer(&i))
+		C.pcre_config(C.int(f), unsafe.Pointer(&i))
 		r = fmt.Sprint(int32(i))
 	}
 	return
@@ -372,7 +372,7 @@ func (re *Regexp) Study(flags int) error {
 	if re.extra != nil {
 		return fmt.Errorf("Regexp already optimized")
 	}
-	if flags == 0 {
+	if flags <= 0 {
 		return fmt.Errorf("flag must be > 0")
 	}
 	var err *C.char

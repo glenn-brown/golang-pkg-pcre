@@ -260,7 +260,8 @@ func Compile(pattern string, flags int) (Regexp, error) {
 	return re, nil
 }
 
-// Compile pattern with jit compilation
+// Compile pattern with jit compilation. flagC is Compile flags,
+// flagS is study flag.
 func CompileJIT(pattern string, flagsC, flagsS int) (Regexp, error) {
 	patternC := C.CString(pattern)
 	defer C.free(unsafe.Pointer(patternC))
@@ -418,6 +419,7 @@ type Matcher struct {
 	Groups   int
 	ovector  []int32 // space for capture offsets, int32 is analogfor C.int type
 	Matches  bool    // last match was successful
+	Error    error   // pcre_exec error from last match
 	Partial  bool    // was the last match a partial match?
 	SubjectS string  // contain finded subject as string
 	SubjectB []byte  // contain finded subject as []byte
@@ -566,7 +568,7 @@ func (m *Matcher) Index() []int {
 // pattern. Returns true if the match succeeds.
 func (m *Matcher) Match(subject []byte, flags int) bool {
 	rc := m.Exec(subject, flags)
-	m.Matches, _ = checkMatch(rc)
+	m.Matches, m.Error = checkMatch(rc)
 	m.Partial = (rc == C.PCRE_ERROR_PARTIAL)
 	return m.Matches
 }
@@ -575,7 +577,7 @@ func (m *Matcher) Match(subject []byte, flags int) bool {
 // Returns true if the match succeeds.
 func (m *Matcher) MatchString(subject string, flags int) bool {
 	rc := m.ExecString(subject, flags)
-	m.Matches, _ = checkMatch(rc)
+	m.Matches, m.Error = checkMatch(rc)
 	m.Partial = (rc == ERROR_PARTIAL)
 	return m.Matches
 }
@@ -587,23 +589,23 @@ func checkMatch(rc int) (bool, error) {
 	case rc == ERROR_NOMATCH:
 		return false, nil
 	case rc == ERROR_NULL:
-		return false, fmt.Errorf("pcre_exec: one or more variables passed to pcre_exec == NULL")
+		return false, fmt.Errorf("%d, pcre_exec: one or more variables passed to pcre_exec == NULL", ERROR_NULL)
 	case rc == ERROR_BADOPTION:
-		return false, fmt.Errorf("pcre_exec: An unrecognized bit was set in the options argument")
+		return false, fmt.Errorf("%d, pcre_exec: An unrecognized bit was set in the options argument", ERROR_BADOPTION)
 	case rc == ERROR_BADMAGIC:
-		return false, fmt.Errorf("pcre_exec: invalid option flag")
+		return false, fmt.Errorf("%d, pcre_exec: invalid option flag", ERROR_BADMAGIC)
 	case rc == ERROR_UNKNOWN_OPCODE:
-		return false, fmt.Errorf("pcre_exec: an unknown item was encountered in the compiled pattern")
+		return false, fmt.Errorf("%d, pcre_exec: an unknown item was encountered in the compiled pattern", ERROR_UNKNOWN_OPCODE)
 	case rc == ERROR_NOMEMORY:
-		return false, fmt.Errorf("pcre_exec: match limit")
+		return false, fmt.Errorf("%d, pcre_exec: match limit", ERROR_NOMEMORY)
 	case rc == ERROR_MATCHLIMIT:
-		return false, fmt.Errorf("pcre_exec: backtracking (match) limit was reached")
+		return false, fmt.Errorf("%d, pcre_exec: backtracking (match) limit was reached", ERROR_MATCHLIMIT)
 	case rc == ERROR_BADUTF8:
-		return false, fmt.Errorf("pcre_exec: string that contains an invalid UTF-8 byte sequence was passed as a subject")
+		return false, fmt.Errorf("%d, pcre_exec: string that contains an invalid UTF-8 byte sequence was passed as a subject", ERROR_BADUTF8)
 	case rc == ERROR_RECURSIONLIMIT:
-		return false, fmt.Errorf("pcre_exec: recursion limit")
+		return false, fmt.Errorf("%d, pcre_exec: recursion limit", ERROR_RECURSIONLIMIT)
 	case rc == ERROR_JIT_STACKLIMIT:
-		return false, fmt.Errorf("pcre_exec: error JIT stack limit")
+		return false, fmt.Errorf("%d, pcre_exec: error JIT stack limit", ERROR_JIT_STACKLIMIT)
 	case rc == ERROR_INTERNAL:
 		panic("pcre_exec: INTERNAL ERROR")
 	case rc == ERROR_BADCOUNT:

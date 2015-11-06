@@ -65,6 +65,7 @@ import "C"
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"unsafe"
 )
 
@@ -228,6 +229,46 @@ func pcregroups(ptr *C.pcre) (count C.int) {
 	C.pcre_fullinfo(ptr, nil,
 		C.PCRE_INFO_CAPTURECOUNT, unsafe.Pointer(&count))
 	return
+}
+
+// Returns string with regex pattern and int with fpcre flags.
+// Flags are specified before the regex in form like this "(?flags)regex"
+// Supported symbols i=CASELESS; m=MULTILINE; s=DOTALL; U=UNGREEDY; J=DUPNAMES;
+// x=EXTENDED; X=EXTRA; D=DOLLAR_ENDONLY; u=UTF8;
+func ParseFlags(ptr string) (string, int) {
+	fReg := MustCompile("^\\(\\?[a-zA-Z]+?\\)", 0)
+	flags := 0
+	for fStr := fReg.FindString(ptr, 0); fStr != ""; ptr = ptr[len(fStr):] {
+		fStr = fReg.FindString(ptr, 0)
+		if strings.Contains(fStr, "i") {
+			flags = flags | CASELESS
+		}
+		if strings.Contains(fStr, "D") {
+			flags = flags | DOLLAR_ENDONLY
+		}
+		if strings.Contains(fStr, "s") {
+			flags = flags | DOTALL
+		}
+		if strings.Contains(fStr, "J") {
+			flags = flags | DUPNAMES
+		}
+		if strings.Contains(fStr, "x") {
+			flags = flags | EXTENDED
+		}
+		if strings.Contains(fStr, "X") {
+			flags = flags | EXTRA
+		}
+		if strings.Contains(fStr, "m") {
+			flags = flags | MULTILINE
+		}
+		if strings.Contains(fStr, "U") {
+			flags = flags | UNGREEDY
+		}
+		if strings.Contains(fStr, "u") {
+			flags = flags | UTF8
+		}
+	}
+	return ptr, flags
 }
 
 // Try to compile the pattern. If an error occurs, the second return

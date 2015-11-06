@@ -301,6 +301,17 @@ func Compile(pattern string, flags int) (Regexp, error) {
 	return re, nil
 }
 
+// Try to parse flags of regex and compile it. If an error occurs,
+// the second return value is non-nil.
+func CompileParse(ptr string) (Regexp, error) {
+	ptr, f := ParseFlags(ptr)
+	retRegex, err := Compile(ptr, f)
+	if err != nil {
+		return Regexp{}, fmt.Errorf("can't compile/study pcre regexp: %s\nFlags:%b", ptr, f)
+	}
+	return retRegex, nil
+}
+
 // Compile pattern with jit compilation. flagC is Compile flags,
 // flagS is study flag.
 func CompileJIT(pattern string, flagsC, flagsS int) (Regexp, error) {
@@ -329,14 +340,34 @@ func CompileJIT(pattern string, flagsC, flagsS int) (Regexp, error) {
 	C.memcpy(unsafe.Pointer(&re.ptr[0]), unsafe.Pointer(ptr), psize)
 	errS := re.study(flagsS)
 	if errS != nil {
-		return re, fmt.Errorf("Study error: %s", errS)
+		return re, fmt.Errorf("study error: %s", errS)
 	}
 	return re, nil
 }
 
+// Try to parse flags of regex and compile it with JIT optimization.
+// If an error occurs, the second return value is non-nil.
+func CompileParseJIT(ptr string, flags int) (Regexp, error) {
+	ptr, f := ParseFlags(ptr)
+	retRegex, err := CompileJIT(ptr, f, flags)
+	if err != nil {
+		return Regexp{}, fmt.Errorf("can't compile/study pcre regexp: %s\nFlags:%b\nFlagsJIT%b", ptr, f, flags)
+	}
+	return retRegex, nil
+}
+
 // Compile the pattern. If compilation fails, panic.
-func MustCompile(pattern string, flags int) (re Regexp) {
-	re, err := Compile(pattern, flags)
+func MustCompile(pattern string, flag int) (re Regexp) {
+	re, err := Compile(pattern, flag)
+	if err != nil {
+		panic(err)
+	}
+	return
+}
+
+// CompileParse the pattern. If compilation fails, panic.
+func MustCompileParse(pattern string) (re Regexp) {
+	re, err := CompileParse(pattern)
 	if err != nil {
 		panic(err)
 	}
@@ -346,6 +377,15 @@ func MustCompile(pattern string, flags int) (re Regexp) {
 // CompileJIT the pattern. If compilation fails, panic.
 func MustCompileJIT(pattern string, flagsC, flagsS int) (re Regexp) {
 	re, err := CompileJIT(pattern, flagsC, flagsS)
+	if err != nil {
+		panic(err)
+	}
+	return
+}
+
+// CompileParseJIT the pattern. If compilation fails, panic.
+func MustCompileParseJIT(pattern string, flags int) (re Regexp) {
+	re, err := CompileParseJIT(pattern, flags)
 	if err != nil {
 		panic(err)
 	}
@@ -441,7 +481,7 @@ func (re Regexp) ReplaceAllString(src, repl string, flags int) string {
 // Studying can be quite a heavy optimization, but it's worth it.
 func (re *Regexp) study(flags int) error {
 	if re.extra != nil {
-		return fmt.Errorf("Regexp already optimized")
+		return fmt.Errorf("regexp already optimized")
 	}
 	if flags <= 0 {
 		return fmt.Errorf("flag must be > 0")

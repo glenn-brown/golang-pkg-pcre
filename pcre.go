@@ -332,6 +332,16 @@ func (re *Regexp) FindIndex(bytes []byte, flags int) []int {
 	return nil
 }
 
+// Return the start and end of the first match, or nil if no match.
+// loc[0] is the start and loc[1] is the end.
+func (re *Regexp) FindString(s string, flags int) string {
+	m := re.Matcher([]byte(s), flags)
+	if m.Matches {
+		return s[int(m.ovector[0]):int(m.ovector[1])]
+	}
+	return ""
+}
+
 // Returns the number of capture groups in the compiled regexp pattern.
 func (re Regexp) Groups() int {
 	if re.ptr == nil {

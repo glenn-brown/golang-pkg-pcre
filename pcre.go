@@ -235,7 +235,7 @@ func pcregroups(ptr *C.pcre) (count C.int) {
 // Returns string with regex pattern and int with fpcre flags.
 // Flags are specified before the regex in form like this "(?flags)regex"
 // Supported symbols i=CASELESS; m=MULTILINE; s=DOTALL; U=UNGREEDY; J=DUPNAMES;
-// x=EXTENDED; X=EXTRA; D=DOLLAR_ENDONLY; u=UTF8;
+// x=EXTENDED; X=EXTRA; D=DOLLAR_ENDONLY; u=UTF8|UCP;
 func ParseFlags(ptr string) (string, int) {
 	fReg := MustCompile("^\\(\\?[a-zA-Z]+?\\)", 0)
 	flags := 0
@@ -266,7 +266,7 @@ func ParseFlags(ptr string) (string, int) {
 			flags = flags | UNGREEDY
 		}
 		if strings.Contains(fStr, "u") {
-			flags = flags | UTF8
+			flags = flags | UTF8 | UCP
 		}
 	}
 	return ptr, flags

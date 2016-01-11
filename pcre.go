@@ -96,6 +96,7 @@ const (
 	NO_AUTO_CAPTURE   = C.PCRE_NO_AUTO_CAPTURE
 	UNGREEDY          = C.PCRE_UNGREEDY
 	UTF8              = C.PCRE_UTF8
+	UCP               = C.PCRE_UCP
 )
 
 // Flags for Match functions

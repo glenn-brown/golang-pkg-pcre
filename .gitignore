@@ -2,6 +2,7 @@
 [0-9].out
 *.[0-9]
 *.cgo?.*
+*.swp
 _cgo_*
 _obj
 _test

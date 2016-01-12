@@ -25,30 +25,20 @@ func TestCompile(t *testing.T) {
 }
 
 func TestCompileFail(t *testing.T) {
-	var check = func(p, msg string, off int) {
+	var check = func(p, msg string) {
 		_, err := Compile(p, 0)
 		switch {
 		case err == nil:
 			t.Error(p)
-		case err.Message != msg:
-			t.Error(p, "Message", err.Message)
-		case err.Offset != off:
-			t.Error(p, "Offset", err.Offset)
+		case err.Error() != msg:
+			t.Error(p, "Message:", err.Error())
 		}
 	}
-	check("(", "missing )", 1)
-	check("\\", "\\ at end of pattern", 1)
-	check("abc\\", "\\ at end of pattern", 4)
-	check("abc\000", "NUL byte in pattern", 3)
-	check("a\000bc", "NUL byte in pattern", 1)
-}
-
-func strings(b [][]byte) (r []string) {
-	r = make([]string, len(b))
-	for i, v := range b {
-		r[i] = string(v)
-	}
-	return
+	check("(",       "( (1): missing )")
+	check(`\`,       `\ (1): \ at end of pattern`)
+	check(`abc\`,    `abc\ (4): \ at end of pattern`)
+	check("abc\000", "abc\000 (3): NUL byte in pattern")
+	check("a\000bc", "a\000bc (1): NUL byte in pattern")
 }
 
 func equal(l, r []string) bool {
@@ -83,16 +73,16 @@ func checkmatch1(t *testing.T, dostring bool, m *Matcher,
 		prefix = "[]byte"
 	}
 	if len(args) == 0 {
-		if m.Matches() {
+		if m.Matches {
 			t.Error(prefix, pattern, subject, "!Matches")
 		}
 	} else {
-		if !m.Matches() {
+		if !m.Matches {
 			t.Error(prefix, pattern, subject, "Matches")
 			return
 		}
-		if m.Groups() != len(args)-1 {
-			t.Error(prefix, pattern, subject, "Groups", m.Groups())
+		if m.Groups != len(args)-1 {
+			t.Error(prefix, pattern, subject, "Groups", m.Groups)
 			return
 		}
 		for i, arg := range args {
@@ -143,42 +133,42 @@ func TestPartial(t *testing.T) {
 
 	// Check we get a partial match when we should
 	m := re.MatcherString("ab", PARTIAL_SOFT)
-	if !m.Matches() {
+	if !m.Matches {
 		t.Error("Failed to find any matches")
-	} else if !m.Partial() {
+	} else if !m.Partial {
 		t.Error("The match was not partial")
 	}
 
 	// Check we get an exact match when we should
 	m = re.MatcherString("abc", PARTIAL_SOFT)
-	if !m.Matches() {
+	if !m.Matches {
 		t.Error("Failed to find any matches")
-	} else if m.Partial() {
+	} else if m.Partial {
 		t.Error("Match was partial but should have been exact")
 	}
 
 	m = re.Matcher([]byte("ab"), PARTIAL_SOFT)
-	if !m.Matches() {
+	if !m.Matches {
 		t.Error("Failed to find any matches")
-	} else if !m.Partial() {
+	} else if !m.Partial {
 		t.Error("The match was not partial")
 	}
 
 	m = re.Matcher([]byte("abc"), PARTIAL_SOFT)
-	if !m.Matches() {
+	if !m.Matches {
 		t.Error("Failed to find any matches")
-	} else if m.Partial() {
+	} else if m.Partial {
 		t.Error("The match was net partial")
 	}
 }
 
 func TestCaseless(t *testing.T) {
 	m := MustCompile("abc", CASELESS).MatcherString("Abc", 0)
-	if !m.Matches() {
+	if !m.Matches {
 		t.Error("CASELESS")
 	}
 	m = MustCompile("abc", 0).MatcherString("Abc", 0)
-	if m.Matches() {
+	if m.Matches {
 		t.Error("!CASELESS")
 	}
 }
@@ -186,7 +176,7 @@ func TestCaseless(t *testing.T) {
 func TestNamed(t *testing.T) {
 	m := MustCompile("(?<L>a)(?<M>X)*bc(?<DIGITS>\\d*)", 0).
 		MatcherString("abc12", 0)
-	if !m.Matches() {
+	if !m.Matches {
 		t.Error("Matches")
 	}
 	if !m.NamedPresent("L") {

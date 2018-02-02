@@ -7,7 +7,7 @@ import (
 )
 
 func TestCompile(t *testing.T) {
-	var check = func (p string, groups int) {
+	var check = func(p string, groups int) {
 		re, err := Compile(p, 0)
 		if err != nil {
 			t.Error(p, err)
@@ -16,7 +16,7 @@ func TestCompile(t *testing.T) {
 			t.Error(p, g)
 		}
 	}
-	check("",0 )
+	check("", 0)
 	check("^", 0)
 	check("^$", 0)
 	check("()", 1)
@@ -25,7 +25,7 @@ func TestCompile(t *testing.T) {
 }
 
 func TestCompileFail(t *testing.T) {
-	var check = func (p, msg string, off int) {
+	var check = func(p, msg string, off int) {
 		_, err := Compile(p, 0)
 		switch {
 		case err == nil:
@@ -47,7 +47,7 @@ func strings(b [][]byte) (r []string) {
 	r = make([]string, len(b))
 	for i, v := range b {
 		r[i] = string(v)
-	} 
+	}
 	return
 }
 
@@ -91,7 +91,7 @@ func checkmatch1(t *testing.T, dostring bool, m *Matcher,
 			t.Error(prefix, pattern, subject, "Matches")
 			return
 		}
-		if m.Groups() != len(args) - 1 {
+		if m.Groups() != len(args)-1 {
 			t.Error(prefix, pattern, subject, "Groups", m.Groups())
 			return
 		}
@@ -185,7 +185,7 @@ func TestReplaceAll(t *testing.T) {
 	// Don't change at ends.
 	result := re.ReplaceAll([]byte("I like foods."), []byte("car"), 0)
 	if string(result) != "I like cards." {
-		t.Error ("ReplaceAll", result)
+		t.Error("ReplaceAll", result)
 	}
 	// Change at ends.
 	result = re.ReplaceAll([]byte("food fight fools foo"), []byte("car"), 0)

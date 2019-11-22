@@ -463,7 +463,7 @@ func (re Regexp) MatcherString(subject string, flags int) (m *Matcher) {
 // Return a copy of a byte slice with pattern matches replaced by repl.
 func (re Regexp) ReplaceAll(bytes, repl []byte, flags int) []byte {
 	m := re.Matcher(bytes, 0)
-	r := []byte{}
+	r := make([]byte, 0, len(bytes))
 	for m.Match(bytes, flags) {
 		r = append(append(r, bytes[:m.ovector[0]]...), repl...)
 		bytes = bytes[m.ovector[1]:]
@@ -525,7 +525,7 @@ func (m *Matcher) Exec(subject []byte, flags int) int {
 		panic("Matcher.Match: uninitialized")
 	}
 	length := len(subject)
-	m.SubjectS = string(subject)
+	m.SubjectS = ""
 	m.SubjectB = subject
 	if length == 0 {
 		subject = nullbyte // make first character adressable
@@ -536,7 +536,17 @@ func (m *Matcher) Exec(subject []byte, flags int) int {
 
 // Same as Exec, but accept string as argument
 func (m *Matcher) ExecString(subject string, flags int) int {
-	return m.Exec([]byte(subject), flags)
+	if m.re.ptr == nil {
+		panic("Matcher.Match: uninitialized")
+	}
+	length := len(subject)
+	m.SubjectS = string(subject)
+	m.SubjectB = nil
+	if length == 0 {
+		subject = "\000" // make first character adressable
+	}
+	subjectptr := (*C.char)(unsafe.Pointer(&subject))
+	return m.exec(subjectptr, length, flags)
 }
 
 func (m *Matcher) exec(subjectptr *C.char, length, flags int) int {

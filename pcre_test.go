@@ -7,7 +7,7 @@ import (
 )
 
 func TestCompile(t *testing.T) {
-	var check = func (p string, groups int) {
+	var check = func(p string, groups int) {
 		re, err := Compile(p, 0)
 		if err != nil {
 			t.Error(p, err)
@@ -16,7 +16,7 @@ func TestCompile(t *testing.T) {
 			t.Error(p, g)
 		}
 	}
-	check("",0 )
+	check("", 0)
 	check("^", 0)
 	check("^$", 0)
 	check("()", 1)
@@ -25,30 +25,20 @@ func TestCompile(t *testing.T) {
 }
 
 func TestCompileFail(t *testing.T) {
-	var check = func (p, msg string, off int) {
+	var check = func(p, msg string) {
 		_, err := Compile(p, 0)
 		switch {
 		case err == nil:
 			t.Error(p)
-		case err.Message != msg:
-			t.Error(p, "Message", err.Message)
-		case err.Offset != off:
-			t.Error(p, "Offset", err.Offset)
+		case err.Error() != msg:
+			t.Error(p, "Message:", err.Error())
 		}
 	}
-	check("(", "missing )", 1)
-	check("\\", "\\ at end of pattern", 1)
-	check("abc\\", "\\ at end of pattern", 4)
-	check("abc\000", "NUL byte in pattern", 3)
-	check("a\000bc", "NUL byte in pattern", 1)
-}
-
-func strings(b [][]byte) (r []string) {
-	r = make([]string, len(b))
-	for i, v := range b {
-		r[i] = string(v)
-	} 
-	return
+	check("(",       "( (1): missing )")
+	check(`\`,       `\ (1): \ at end of pattern`)
+	check(`abc\`,    `abc\ (4): \ at end of pattern`)
+	check("abc\000", "abc\000 (3): NUL byte in pattern")
+	check("a\000bc", "a\000bc (1): NUL byte in pattern")
 }
 
 func equal(l, r []string) bool {
@@ -83,16 +73,16 @@ func checkmatch1(t *testing.T, dostring bool, m *Matcher,
 		prefix = "[]byte"
 	}
 	if len(args) == 0 {
-		if m.Matches() {
+		if m.Matches {
 			t.Error(prefix, pattern, subject, "!Matches")
 		}
 	} else {
-		if !m.Matches() {
+		if !m.Matches {
 			t.Error(prefix, pattern, subject, "Matches")
 			return
 		}
-		if m.Groups() != len(args) - 1 {
-			t.Error(prefix, pattern, subject, "Groups", m.Groups())
+		if m.Groups != len(args)-1 {
+			t.Error(prefix, pattern, subject, "Groups", m.Groups)
 			return
 		}
 		for i, arg := range args {
@@ -138,13 +128,47 @@ func TestMatcher(t *testing.T) {
 	check(`^(.*)$`, "a\000c", "a\000c", "a\000c")
 }
 
+func TestPartial(t *testing.T) {
+	re := MustCompile(`^abc`, 0)
+
+	// Check we get a partial match when we should
+	m := re.MatcherString("ab", PARTIAL_SOFT)
+	if !m.Matches {
+		t.Error("Failed to find any matches")
+	} else if !m.Partial {
+		t.Error("The match was not partial")
+	}
+
+	// Check we get an exact match when we should
+	m = re.MatcherString("abc", PARTIAL_SOFT)
+	if !m.Matches {
+		t.Error("Failed to find any matches")
+	} else if m.Partial {
+		t.Error("Match was partial but should have been exact")
+	}
+
+	m = re.Matcher([]byte("ab"), PARTIAL_SOFT)
+	if !m.Matches {
+		t.Error("Failed to find any matches")
+	} else if !m.Partial {
+		t.Error("The match was not partial")
+	}
+
+	m = re.Matcher([]byte("abc"), PARTIAL_SOFT)
+	if !m.Matches {
+		t.Error("Failed to find any matches")
+	} else if m.Partial {
+		t.Error("The match was net partial")
+	}
+}
+
 func TestCaseless(t *testing.T) {
 	m := MustCompile("abc", CASELESS).MatcherString("Abc", 0)
-	if !m.Matches() {
+	if !m.Matches {
 		t.Error("CASELESS")
 	}
 	m = MustCompile("abc", 0).MatcherString("Abc", 0)
-	if m.Matches() {
+	if m.Matches {
 		t.Error("!CASELESS")
 	}
 }
@@ -152,7 +176,7 @@ func TestCaseless(t *testing.T) {
 func TestNamed(t *testing.T) {
 	m := MustCompile("(?<L>a)(?<M>X)*bc(?<DIGITS>\\d*)", 0).
 		MatcherString("abc12", 0)
-	if !m.Matches() {
+	if !m.Matches {
 		t.Error("Matches")
 	}
 	if !m.NamedPresent("L") {
@@ -164,7 +188,8 @@ func TestNamed(t *testing.T) {
 	if !m.NamedPresent("DIGITS") {
 		t.Error("NamedPresent(\"DIGITS\")")
 	}
-	if "12" != m.NamedString("DIGITS") {
+	group, err := m.NamedString("DIGITS")
+	if err != nil || "12" != group {
 		t.Error("NamedString(\"DIGITS\")")
 	}
 }
@@ -180,12 +205,27 @@ func TestFindIndex(t *testing.T) {
 	}
 }
 
+func TestExtract(t *testing.T) {
+	re := MustCompile("b(c)(d)", 0)
+	m := re.MatcherString("abcdef", 0)
+	i := m.ExtractString()
+	if i[0] != "abcdef" {
+		t.Error("Full line unavailable: ", i[0])
+	}
+	if i[1] != "c" {
+		t.Error("First match group no as expected: ", i[1])
+	}
+	if i[2] != "d" {
+		t.Error("Second match group no as expected: ", i[2])
+	}
+}
+
 func TestReplaceAll(t *testing.T) {
 	re := MustCompile("foo", 0)
 	// Don't change at ends.
 	result := re.ReplaceAll([]byte("I like foods."), []byte("car"), 0)
 	if string(result) != "I like cards." {
-		t.Error ("ReplaceAll", result)
+		t.Error("ReplaceAll", result)
 	}
 	// Change at ends.
 	result = re.ReplaceAll([]byte("food fight fools foo"), []byte("car"), 0)

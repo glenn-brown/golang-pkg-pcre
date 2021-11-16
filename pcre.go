@@ -1,30 +1,5 @@
-// Copyright (c) 2011 Florian Weimer. All rights reserved.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// * Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-// This package provides access to the Perl Compatible Regular
-// Expresion library, PCRE.
+// Package pcre provides access to the Perl Compatible Regular Expression
+// library, PCRE.
 //
 // It implements two main types, Regexp and Matcher. Regexp objects
 // store a compiled regular expression. They consist of two immutable
@@ -33,25 +8,25 @@
 // Compilation of regular expressions using Compile or MustCompile is
 // slightly expensive, so these objects should be kept and reused,
 // instead of compiling them from scratch for each matching attempt.
-// CompileJIT and MustCompileJIT are way more expensive then ordinary
-// methods, becose they run Study() func after Regexp compiled but gives
-// much better perfomance:
-// http://sljit.sourceforge.net/regex_perf.html
+// CompileJIT and MustCompileJIT are way more expensive than ordinary
+// methods, because they run Study() func after Regexp compiled but gives
+// much better performance:
+// https://zherczeg.github.io/sljit/regex_perf.html
 //
-// Matcher objects keeps the results of a match against a []byte or
+// Matcher objects keep the results of a match against a []byte or
 // string subject. The Group and GroupString functions provide access
 // to capture groups; both versions work no matter if the subject was a
 // []byte or string.
 //
-// Matcher objects contain some temporary space and refer the original
+// Matcher objects contain some temporary space and refer to the original
 // subject. They are mutable and can be reused (using Match,
 // MatchString, Reset or ResetString).
 //
-// Most of Matcher.*String method are just links to []byte methods, so keep
+// Most of Matcher.*String methods are just links to []byte methods, so keep
 // this in mind.
 //
 // For details on the regular expression language implemented by this
-// package and the flags defined below, see the PCRE documentation.
+// package and the flags defined below see the PCRE documentation.
 // http://www.pcre.org/pcre.txt
 package pcre
 
@@ -791,3 +766,28 @@ func (m *Matcher) ResetString(re Regexp, subject string, flags int) {
 	m.init(re)
 	m.MatchString(subject, flags)
 }
+
+// Copyright (c) 2011 Florian Weimer. All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+// * Redistributions of source code must retain the above copyright
+// notice, this list of conditions and the following disclaimer.
+//
+// * Redistributions in binary form must reproduce the above copyright
+// notice, this list of conditions and the following disclaimer in the
+// documentation and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
